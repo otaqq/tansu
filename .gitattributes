@@ -1,0 +1,11 @@
+# Keep the Composer package to what PHP apps need: the PHP code and the UI it serves
+/.github export-ignore
+/conformance export-ignore
+/docs export-ignore
+/lang/go export-ignore
+/lang/ruby export-ignore
+/protocol export-ignore
+/tests export-ignore
+/.gitattributes export-ignore
+/.gitignore export-ignore
+/mise.toml export-ignore

@@ -1,0 +1,28 @@
+{
+    "name": "otaqq/tansu",
+    "description": "Lightweight media explorer for web apps: per-owner folders, uploads and an image picker, with dependency-free Web Components.",
+    "keywords": ["media", "file manager", "media library", "image picker", "web components", "laravel"],
+    "type": "library",
+    "license": "MIT",
+    "authors": [
+        { "name": "otaqq" }
+    ],
+    "require": {
+        "php": "^8.3"
+    },
+    "autoload": {
+        "psr-4": {
+            "Otaqq\\Tansu\\": "lang/php/core/",
+            "Otaqq\\Tansu\\Laravel\\": "lang/php/laravel/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Otaqq\\Tansu\\Tests\\": "tests/php/"
+        }
+    },
+    "minimum-stability": "stable",
+    "config": {
+        "sort-packages": true
+    }
+}
