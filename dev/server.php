@@ -17,12 +17,24 @@ use League\Flysystem\Local\LocalFilesystemAdapter;
 use Otaqq\Tansu\Explorer;
 use Otaqq\Tansu\FileTypes;
 use Otaqq\Tansu\Limits;
+use Otaqq\Tansu\OptimizeOptions;
 use Otaqq\Tansu\Options;
 use Otaqq\Tansu\Owner;
 use Otaqq\Tansu\Path;
 use Otaqq\Tansu\TansuException;
 
 require __DIR__.'/../vendor/autoload.php';
+
+/**
+ * Writes log entries (skipped optimizations) to the server's output.
+ */
+final class StderrLogger extends Psr\Log\AbstractLogger
+{
+    public function log($level, string|Stringable $message, array $context = []): void
+    {
+        file_put_contents('php://stderr', "[$level] $message ".json_encode($context, JSON_UNESCAPED_SLASHES)."\n");
+    }
+}
 
 $root = dirname(__DIR__);
 $uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) ?: '/';
@@ -66,8 +78,20 @@ $explorer = new Explorer(
     fn (string $location, string $path) => '/api/raw?'.http_build_query(['path' => $path, 'owner' => $ownerId]),
     new Options(
         new FileTypes([...FileTypes::DEFAULT, FileTypes::SVG]),
-        new Limits(2 * 1024 * 1024, 10 * 1024 * 1024, 50),
+        new Limits(['image' => 2 * 1024 * 1024, 'document' => 5 * 1024 * 1024, 'video' => 20 * 1024 * 1024], 30 * 1024 * 1024, 50),
+        optimize: OptimizeOptions::fromArray([
+            'enabled' => true,
+            'presets' => [
+                'thumb' => ['label' => ['en' => 'Thumbnail', 'ja' => 'サムネイル'], 'max_width' => 64, 'max_height' => 64, 'quality' => 80],
+                'compact' => ['label' => ['en' => 'Smaller file', 'ja' => 'ファイルを小さく'], 'quality' => 60],
+            ],
+            'custom' => [
+                'max_width' => ['min' => 1, 'max' => 4096, 'default' => 1200],
+                'max_height' => ['min' => 1, 'max' => 4096, 'default' => 1200],
+            ],
+        ]),
     ),
+    logger: new StderrLogger(),
 );
 if ($ownerId === 'readonly') {
     $storage->createDirectory('owners/readonly');
@@ -120,7 +144,13 @@ function upload(Explorer $explorer): array
         throw new TansuException('upload_failed', 400, 'The file did not arrive complete.');
     }
 
-    return $explorer->upload($folder, $file['name'], (int) $file['size'], fn () => (string) file_get_contents($file['tmp_name']));
+    return $explorer->upload(
+        $folder,
+        $file['name'],
+        (int) $file['size'],
+        fn () => (string) file_get_contents($file['tmp_name']),
+        array_intersect_key($_POST, array_flip(['optimize', 'max_width', 'max_height', 'quality'])),
+    );
 }
 
 function raw(Explorer $explorer): bool

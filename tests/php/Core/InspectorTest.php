@@ -21,6 +21,30 @@ final class InspectorTest extends TestCase
         $this->assertSame('image/webp', $inspector->inspect(Images::webp())->type);
     }
 
+    public function test_detects_documents_and_videos_from_content(): void
+    {
+        $inspector = new Inspector(new FileTypes());
+        $this->assertSame('application/pdf', $inspector->inspect(Images::pdf())->type);
+        $this->assertSame('video/mp4', $inspector->inspect(Images::isoMedia('mp42'))->type);
+        $this->assertSame('video/mp4', $inspector->inspect(Images::isoMedia('isom'))->type);
+        $this->assertSame('video/webm', $inspector->inspect(Images::ebml('webm'))->type);
+        $this->assertSame(Images::pdf(), $inspector->inspect(Images::pdf())->bytes);
+    }
+
+    public function test_rejects_look_alikes_of_documents_and_videos(): void
+    {
+        $inspector = new Inspector(new FileTypes());
+        // HEIC and AVIF images and QuickTime are ISO media too; Matroska that is not WebM; text mentioning %PDF-
+        foreach ([Images::isoMedia('heic'), Images::isoMedia('avif'), Images::isoMedia('qt  '), Images::ebml('matroska'), "hello %PDF-1.4"] as $bytes) {
+            try {
+                $inspector->inspect($bytes);
+                $this->fail('Accepted '.bin2hex(substr($bytes, 0, 16)));
+            } catch (TansuException $e) {
+                $this->assertSame('type_not_allowed', $e->errorCode);
+            }
+        }
+    }
+
     public function test_rejects_types_that_are_not_accepted(): void
     {
         $this->expectExceptionObject(TansuException::typeNotAllowed());

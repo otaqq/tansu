@@ -7,6 +7,8 @@
  *   csrf-token  sent as X-CSRF-TOKEN; defaults to <meta name="csrf-token">
  *   path        the folder to show; updated as the user moves around
  *   selectable  shows a "Choose" button; choosing fires `tansu-select`
+ *   optimize    first choice of image optimization when the server offers it: a preset key, "custom" or "none"
+ *               (else the server's default)
  *   lang        language of the UI (else the closest [lang], else the document's)
  *
  * Events (bubble, composed)
@@ -17,11 +19,14 @@
 import { TansuClient, TansuError } from './api.js';
 import { adoptStyles, h, replace } from './dom.js';
 import { formatDate, formatSize, languageOf, translator } from './i18n.js';
+import { fileGroup, fileSizeLimit, initialOptimize, labelOf, optimizeFields } from './optimize.js';
 import { explorerStyles } from './styles.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const FOLDER_ICON = 'M2 5.5A1.5 1.5 0 0 1 3.5 4h4.38a1.5 1.5 0 0 1 1.06.44L10.5 6h10A1.5 1.5 0 0 1 22 7.5v11a1.5 1.5 0 0 1-1.5 1.5h-17A1.5 1.5 0 0 1 2 18.5z';
 const FILE_ICON = 'M6 2h8l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm7 1.5V8h4.5z';
+const DOCUMENT_ICON = 'M6 2h8l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm7 1.5V8h4.5zM8 11.5h8V13H8zm0 3.5h8v1.5H8z';
+const VIDEO_ICON = 'M3 5h18a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zm7 4v6l5-3z';
 
 function icon(pathData) {
   const svg = document.createElementNS(SVG_NS, 'svg');
@@ -29,8 +34,15 @@ function icon(pathData) {
   svg.setAttribute('aria-hidden', 'true');
   const path = document.createElementNS(SVG_NS, 'path');
   path.setAttribute('d', pathData);
+  path.setAttribute('fill-rule', 'evenodd');
   svg.append(path);
   return svg;
+}
+
+/** The icon of a file that has no thumbnail, by its group. */
+function fileIcon(type) {
+  const group = fileGroup(type);
+  return icon(group === 'video' ? VIDEO_ICON : type === 'application/pdf' ? DOCUMENT_ICON : FILE_ICON);
 }
 
 function parentOf(path) {
@@ -43,7 +55,7 @@ function joinPath(folder, name) {
 }
 
 export class TansuExplorer extends HTMLElement {
-  static observedAttributes = ['endpoint', 'owner', 'csrf-token', 'path', 'selectable', 'lang'];
+  static observedAttributes = ['endpoint', 'owner', 'csrf-token', 'path', 'selectable', 'optimize', 'lang'];
 
   #client = null;
   #info = null;
@@ -52,6 +64,8 @@ export class TansuExplorer extends HTMLElement {
   #path = '/';
   #selected = null;
   #uploads = [];
+  /** State of the optimize controls (see optimize.js); undefined until the info is loaded */
+  #optimize = undefined;
   #status = null;
   #loading = false;
   #dragDepth = 0;
@@ -102,6 +116,9 @@ export class TansuExplorer extends HTMLElement {
       this.#render();
     } else if (name === 'selectable') {
       this.#renderDetails();
+    } else if (name === 'optimize') {
+      if (this.#info) this.#optimize = initialOptimize(this.#info.optimize, newValue);
+      this.#renderOptimize();
     } else {
       this.#reconnect();
     }
@@ -139,6 +156,7 @@ export class TansuExplorer extends HTMLElement {
     this.#client = new TansuClient({ endpoint, owner: this.getAttribute('owner') || '', csrfToken });
     this.#path = this.getAttribute('path') || '/';
     this.#selected = null;
+    this.#optimize = undefined;
     this.refresh();
   }
 
@@ -150,11 +168,14 @@ export class TansuExplorer extends HTMLElement {
       const info = await client.info();
       if (client !== this.#client) return;
       this.#info = info;
+      // Keep what the person chose while the info reloads after uploads
+      if (this.#optimize === undefined) this.#optimize = initialOptimize(info.optimize, this.getAttribute('optimize'));
     } catch (error) {
       if (client !== this.#client) return;
       this.#fail(error);
     }
     this.#renderToolbar();
+    this.#renderOptimize();
     this.#renderUsage();
     this.#renderDetails();
   }
@@ -214,6 +235,7 @@ export class TansuExplorer extends HTMLElement {
       tree: h('nav', { class: 'tree', part: 'tree', 'aria-label': t('root') }),
       crumbs: h('div', { class: 'crumbs' }),
       buttons: h('div', { class: 'actions' }),
+      optimize: h('div', { class: 'optimize', part: 'optimize', hidden: true }),
       grid: h('div', { class: 'grid', part: 'grid', role: 'listbox', 'aria-label': t('root') }),
       uploads: h('ul', { class: 'uploads', part: 'uploads' }),
       status: h('div', { class: 'status', role: 'status', 'aria-live': 'polite' }),
@@ -224,6 +246,7 @@ export class TansuExplorer extends HTMLElement {
     };
     const main = h('div', { class: 'main' },
       h('div', { class: 'toolbar', part: 'toolbar' }, this.#els.crumbs, this.#els.buttons),
+      this.#els.optimize,
       this.#els.grid, this.#els.uploads, this.#els.status, this.#els.usage, this.#els.drop);
     main.addEventListener('dragenter', (event) => this.#onDrag(event, 1));
     main.addEventListener('dragleave', (event) => this.#onDrag(event, -1));
@@ -251,6 +274,7 @@ export class TansuExplorer extends HTMLElement {
   #render() {
     this.#renderTree();
     this.#renderToolbar();
+    this.#renderOptimize();
     this.#renderGrid();
     this.#renderDetails();
     this.#renderUploads();
@@ -294,6 +318,87 @@ export class TansuExplorer extends HTMLElement {
     ] : null);
   }
 
+  /** The optimize controls above the grid: a choice (original / presets / custom), custom values and a hint. */
+  #renderOptimize() {
+    const t = this.#t;
+    const state = this.#optimize;
+    const offer = this.#info?.optimize;
+    const element = this.#els.optimize;
+    element.hidden = !state || !this.#canManage;
+    if (element.hidden) {
+      replace(element);
+      return;
+    }
+    const lang = this.#lang;
+    const describe = (preset) => [
+      preset.max_width !== null || preset.max_height !== null ? t('optimizeSize', { width: preset.max_width ?? '–', height: preset.max_height ?? '–' }) : null,
+      preset.quality !== null ? t('optimizeQuality', { quality: preset.quality }) : null,
+    ].filter(Boolean).join(' · ');
+    const select = h('select', {
+      'aria-label': t('optimize'),
+      onchange: (event) => {
+        state.choice = event.target.value;
+        this.#renderOptimize();
+      },
+    },
+    h('option', { value: 'none' }, t('optimizeNone')),
+    offer.presets.map((preset) => h('option', { value: preset.key }, `${labelOf(preset.label, lang)} (${describe(preset)})`)),
+    offer.custom ? h('option', { value: 'custom' }, t('optimizeCustom')) : null);
+    select.value = state.choice;
+
+    const hintText = h('p', { class: 'optimize-hint', id: 'tansu-optimize-hint', hidden: true }, t('optimizeHint'));
+    const hint = h('button', {
+      type: 'button',
+      class: 'hint',
+      title: t('optimizeHint'),
+      'aria-label': t('optimizeHintLabel'),
+      'aria-expanded': 'false',
+      'aria-controls': 'tansu-optimize-hint',
+      onclick: (event) => {
+        hintText.hidden = !hintText.hidden;
+        event.currentTarget.setAttribute('aria-expanded', String(!hintText.hidden));
+      },
+    }, '?');
+
+    const custom = state.choice === 'custom' && offer.custom ? this.#customInputs(state.custom, offer.custom) : null;
+    replace(element, h('label', { class: 'choice' }, h('span', {}, t('optimize')), select), hint, custom, hintText);
+  }
+
+  #customInputs(values, ranges) {
+    const t = this.#t;
+    const number = (key, field, label) => {
+      const range = ranges[field];
+      return h('input', {
+        type: 'number',
+        min: range.min,
+        max: range.max,
+        step: 1,
+        value: values[key],
+        'aria-label': label,
+        disabled: !values[key === 'quality' ? 'compress' : 'resize'],
+        onchange: (event) => {
+          const value = Number(event.target.value);
+          if (Number.isInteger(value) && value >= range.min && value <= range.max) values[key] = value;
+          else event.target.value = values[key];
+        },
+      });
+    };
+    const width = number('maxWidth', 'max_width', t('width'));
+    const height = number('maxHeight', 'max_height', t('height'));
+    const quality = number('quality', 'quality', t('quality'));
+    const toggle = (key, inputs, label) => h('label', {}, h('input', {
+      type: 'checkbox',
+      checked: values[key],
+      onchange: (event) => {
+        values[key] = event.target.checked;
+        for (const input of inputs) input.disabled = !values[key];
+      },
+    }), label);
+    return h('div', { class: 'custom' },
+      h('span', { class: 'field' }, toggle('resize', [width, height], t('resize')), width, h('span', { 'aria-hidden': 'true' }, '×'), height, h('span', {}, 'px')),
+      h('span', { class: 'field' }, toggle('compress', [quality], t('compress')), quality, h('span', {}, '%')));
+  }
+
   #renderGrid() {
     const t = this.#t;
     if (this.#loading && !this.#listing) {
@@ -311,7 +416,7 @@ export class TansuExplorer extends HTMLElement {
         ? icon(FOLDER_ICON)
         : item.type.startsWith('image/')
           ? h('img', { src: item.url, alt: '', loading: 'lazy', decoding: 'async' })
-          : icon(FILE_ICON);
+          : fileIcon(item.type);
       const tile = h('button', {
         type: 'button',
         class: 'tile',
@@ -357,9 +462,14 @@ export class TansuExplorer extends HTMLElement {
       return;
     }
     const lang = this.#lang;
+    const group = fileGroup(item.type);
+    const preview = group === 'image'
+      ? h('img', { src: item.url, alt: item.name })
+      : group === 'video'
+        ? h('video', { src: item.url, controls: true, preload: 'metadata', 'aria-label': item.name })
+        : fileIcon(item.type);
     replace(this.#els.details,
-      h('div', { class: 'preview', part: 'preview' },
-        item.type.startsWith('image/') ? h('img', { src: item.url, alt: item.name }) : icon(FILE_ICON)),
+      h('div', { class: 'preview', part: 'preview' }, preview),
       h('h3', {}, item.name),
       h('dl', {},
         h('dt', {}, t('size')), h('dd', {}, formatSize(item.size, lang)),
@@ -367,7 +477,7 @@ export class TansuExplorer extends HTMLElement {
         h('dt', {}, t('modified')), h('dd', {}, formatDate(item.modified, lang))),
       h('div', { class: 'actions' },
         this.hasAttribute('selectable') ? h('button', { type: 'button', class: 'primary', onclick: () => this.#choose(item) }, t('choose')) : null,
-        h('a', { href: item.url, target: '_blank', rel: 'noopener', class: 'button', part: 'link' }, t('open')),
+        h('a', { href: item.url, target: '_blank', rel: 'noopener', class: 'button', part: 'link' }, group === 'document' ? t('openInNewTab') : t('open')),
         manage));
   }
 
@@ -375,8 +485,27 @@ export class TansuExplorer extends HTMLElement {
     const t = this.#t;
     replace(this.#els.uploads, this.#uploads.map((upload) => h('li', {},
       h('span', {}, upload.name),
-      h('span', { class: upload.error ? 'error' : '' }, upload.error ? this.#message(upload.error) : upload.done ? t('uploaded') : `${Math.round(upload.progress * 100)}%`),
-      upload.done || upload.error ? null : h('progress', { max: 1, value: upload.progress }))));
+      h('span', { class: upload.error ? 'error' : '' }, upload.error ? this.#message(upload.error, upload.max) : upload.done ? t('uploaded') : `${Math.round(upload.progress * 100)}%`),
+      upload.done || upload.error ? null : h('progress', { max: 1, value: upload.progress }),
+      // Optimization was asked for but not done: stays until the person closes it
+      upload.warning ? h('div', { class: 'warning', role: 'alert' },
+        h('span', {}, this.#skipped(upload.warning)),
+        h('button', {
+          type: 'button',
+          class: 'dismiss',
+          'aria-label': t('close'),
+          onclick: () => {
+            this.#uploads = this.#uploads.filter((other) => other !== upload);
+            this.#renderUploads();
+          },
+        }, '×')) : null)));
+  }
+
+  #skipped(reason) {
+    const t = this.#t;
+    const key = `skipped.${reason}`;
+    const text = t(key);
+    return text === key ? t('skipped.other', { reason }) : text;
   }
 
   #renderUsage() {
@@ -428,12 +557,13 @@ export class TansuExplorer extends HTMLElement {
     this.dispatchEvent(new CustomEvent('tansu-change', { detail: { action, path, item }, bubbles: true, composed: true }));
   }
 
-  #message(error) {
+  #message(error, max = null) {
     const t = this.#t;
     if (!(error instanceof TansuError)) return t('error.other', { message: String(error?.message || error) });
     const key = `error.${error.code}`;
     const text = t(key, {
-      max: this.#info ? formatSize(this.#info.limits.file_size, this.#lang) : '',
+      message: error.message,
+      max: this.#info ? formatSize(max ?? this.#info.limits.file_size, this.#lang) : '',
       types: this.#info ? this.#info.accept.map((type) => type.extensions[0].toUpperCase()).join(', ') : '',
     });
     return text === key ? t('error.other', { message: error.message }) : text;
@@ -496,11 +626,13 @@ export class TansuExplorer extends HTMLElement {
   async #upload(files) {
     if (!files.length || !this.#canManage) return;
     const folder = this.#path;
-    const queue = files.map((file) => ({ file, name: file.name, progress: 0, done: false, error: null }));
-    this.#uploads = [...this.#uploads.filter((upload) => !upload.done && !upload.error), ...queue];
+    const queue = files.map((file) => ({ file, name: file.name, progress: 0, done: false, error: null, max: null, warning: null }));
+    const fields = optimizeFields(this.#optimize);
+    this.#uploads = [...this.#uploads.filter((upload) => (!upload.done && !upload.error) || upload.warning), ...queue];
     this.#status = null;
     this.#render();
     for (const upload of queue) {
+      upload.max = this.#info ? fileSizeLimit(this.#info, upload.file) : null;
       upload.error = this.#precheck(upload.file);
       if (upload.error) {
         this.#renderUploads();
@@ -508,6 +640,7 @@ export class TansuExplorer extends HTMLElement {
       }
       try {
         const stored = await this.#client.upload(folder, upload.file, {
+          fields,
           onProgress: (fraction) => {
             upload.progress = fraction;
             this.#renderUploads();
@@ -515,6 +648,7 @@ export class TansuExplorer extends HTMLElement {
         });
         upload.done = true;
         upload.progress = 1;
+        upload.warning = stored.optimization_skipped || null;
         this.#changed('file-uploaded', stored.path, stored);
       } catch (error) {
         upload.error = error;
@@ -524,7 +658,7 @@ export class TansuExplorer extends HTMLElement {
     }
     await Promise.all([this.#loadInfo(), folder === this.#path ? this.#loadFolder() : null]);
     setTimeout(() => {
-      this.#uploads = this.#uploads.filter((upload) => !upload.done);
+      this.#uploads = this.#uploads.filter((upload) => !upload.done || upload.warning);
       this.#renderUploads();
     }, 3000);
   }
@@ -532,7 +666,7 @@ export class TansuExplorer extends HTMLElement {
   /** Checks size and type before sending; the server checks again by content. */
   #precheck(file) {
     if (!this.#info) return null;
-    if (file.size > this.#info.limits.file_size) return new TansuError('file_too_large', 'The file is too large.');
+    if (file.size > fileSizeLimit(this.#info, file)) return new TansuError('file_too_large', 'The file is too large.');
     const extension = file.name.includes('.') ? file.name.slice(file.name.lastIndexOf('.') + 1).toLowerCase() : '';
     const accepted = this.#info.accept.some((type) => type.type === file.type || type.extensions.includes(extension));
     return accepted ? null : new TansuError('type_not_allowed', 'This type of file is not allowed.');

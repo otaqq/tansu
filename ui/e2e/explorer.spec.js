@@ -96,7 +96,7 @@ test('shows errors from the server', async ({ page }) => {
 
   // The name says PNG, the content does not: the server refuses it
   await explorer.locator('input[type=file]').setInputFiles(text('fake.png'));
-  await expect(explorer.locator('.uploads')).toContainText('This type of file cannot be uploaded (JPG, PNG, GIF, WEBP, SVG)');
+  await expect(explorer.locator('.uploads')).toContainText('This type of file cannot be uploaded (JPG, PNG, GIF, WEBP, PDF, MP4, WEBM, SVG)');
 
   for (let i = 0; i < 2; i++) {
     await explorer.getByRole('button', { name: 'New folder' }).click();

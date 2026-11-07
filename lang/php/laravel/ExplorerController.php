@@ -64,7 +64,13 @@ final class ExplorerController
                 throw $this->uploadError($file);
             }
 
-            return $e->upload($folder, $file->getClientOriginalName(), (int) $file->getSize(), fn () => (string) $file->get());
+            return $e->upload(
+                $folder,
+                $file->getClientOriginalName(),
+                (int) $file->getSize(),
+                fn () => (string) $file->get(),
+                $request->only(['optimize', 'max_width', 'max_height', 'quality']),
+            );
         }, 201);
     }
 

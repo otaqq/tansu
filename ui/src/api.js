@@ -84,10 +84,11 @@ export class TansuClient {
    *
    * @param {string} folder
    * @param {Blob & {name?: string}} file
-   * @param {{onProgress?: (fraction: number) => void, signal?: AbortSignal}} [options]
+   * @param {{onProgress?: (fraction: number) => void, signal?: AbortSignal, fields?: Record<string, string|number|undefined>}} [options]
+   *   fields: more form fields, such as the optimization (`optimize`, `max_width`, `max_height`, `quality`)
    * @returns {Promise<object>} the stored file
    */
-  upload(folder, file, { onProgress, signal } = {}) {
+  upload(folder, file, { onProgress, signal, fields = {} } = {}) {
     return new Promise((resolve, reject) => {
       const xhr = this.xhr();
       xhr.open('POST', this.url('/files'));
@@ -110,6 +111,9 @@ export class TansuClient {
       signal?.addEventListener('abort', () => xhr.abort());
       const form = new FormData();
       form.append('path', folder);
+      for (const [key, value] of Object.entries(fields)) {
+        if (value !== undefined && value !== null) form.append(key, String(value));
+      }
       form.append('file', file, file.name || 'file');
       xhr.send(form);
     });

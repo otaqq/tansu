@@ -1,8 +1,8 @@
 # tansu
 
-**A lightweight media explorer for web apps — folders, uploads and an image picker, with no jQuery and no build step.**
+**A lightweight media explorer for web apps — folders, uploads and a picker, with no jQuery and no build step.**
 
-Most file managers for web frameworks still ship jQuery, Bootstrap or a Vue bundle, and bring every feature of a desktop file manager with them. tansu aims at the common case instead: each owner (a company, a user, a team) keeps its own images in a folder tree, and forms pick from them. (*Tansu* is Japanese for a chest of drawers: things are put away in drawers and taken out when needed.)
+Most file managers for web frameworks still ship jQuery, Bootstrap or a Vue bundle, and bring every feature of a desktop file manager with them. tansu aims at the common case instead: each owner (a company, a user, a team) keeps its own images, PDFs and videos in a folder tree, and forms pick from them. (*Tansu* is Japanese for a chest of drawers: things are put away in drawers and taken out when needed.)
 
 > **Status:** pre-alpha. The layout and the plan are in place; nothing is released yet. See [docs/roadmap.md](docs/roadmap.md).
 
@@ -10,8 +10,9 @@ Most file managers for web frameworks still ship jQuery, Bootstrap or a Vue bund
 
 - **No dependencies in the browser.** The UI is a set of Web Components (custom elements) shipped as plain ES modules. No jQuery, no Alpine, no framework, no bundler. It works next to whatever the host page already uses.
 - **CSS-framework neutral.** A small stylesheet with CSS custom properties, so it fits Bulma, Bootstrap or a hand-written theme.
-- **Owners and quotas built in.** Files live in a per-owner root; the host app decides who the owner is and who may do what. Limits per file and per owner (total size, file count).
-- **Safe defaults.** Uploads are checked by content, not by extension; SVG is off unless enabled (and is sanitized when it is); file names are normalized; EXIF metadata is stripped.
+- **Owners and quotas built in.** Files live in a per-owner root; the host app decides who the owner is and who may do what. Limits per file (one size, or a size per group: images, documents, videos) and per owner (total size, file count).
+- **Safe defaults.** Uploads are checked by content, not by extension; SVG is off unless enabled (and is sanitized when it is); file names are normalized; EXIF metadata is stripped from images.
+- **Optional image optimization.** When the app turns it on, the person uploading chooses per upload to keep the original, use a preset (such as "Logo, 600 × 600") or enter a size and quality. Images that cannot be processed safely (animated, or too large for the memory) are stored as they are, and the person and the log are told.
 - **One protocol, many back ends.** The UI talks to the server over a small, documented HTTP JSON API ([protocol/](protocol)). The PHP/Laravel back end comes first; other languages can implement the same API.
 
 ## Layout
@@ -65,6 +66,38 @@ The routes are registered under `/tansu` with the `web` and `auth` middleware. O
 <!-- A form field: opens the explorer in a modal and submits the chosen file's path -->
 <tansu-picker name="image" endpoint="{{ url('tansu') }}" value="{{ $post->image }}" src="{{ $post->image_url }}"></tansu-picker>
 ```
+
+### Configuration
+
+`config/tansu.php` is merged over the package defaults at every depth, so the app writes only what it changes. Lists (`accept`, `routes.middleware`) are replaced, not merged.
+
+```php
+return [
+    'accept' => ['image'],                                    // default: ['image', 'document', 'video']
+    'limits' => ['file_size' => ['image' => 4 * 1024 * 1024], 'total_size' => 10 * 1024 * 1024, 'files' => 50],
+    'optimize' => [
+        'enabled' => true,
+        'presets' => [
+            'logo' => ['label' => ['en' => 'Logo', 'ja' => 'ロゴ'], 'max_width' => 600, 'max_height' => 600, 'quality' => 80],
+        ],
+        'custom' => ['max_width' => ['default' => 1200], 'quality' => ['default' => 80]],
+    ],
+];
+```
+
+| Key | Default | Meaning |
+|---|---|---|
+| `accept` | `['image', 'document', 'video']` | Groups and media types. `image`: JPEG, PNG, GIF, WebP; `document`: PDF; `video`: MP4, WebM. SVG (`'image/svg+xml'`) is in no group: name it to accept it (it is sanitized) |
+| `strip_metadata` | `true` | Remove EXIF, XMP and similar metadata from images. **PDF and video metadata is not removed** (author, device, and in phone videos the GPS position); tell users when that matters |
+| `limits.file_size` | image 5 MB, document 10 MB, video 50 MB | One number for every type, or a size per group. A map is merged over the defaults, so a group left out keeps its default size (write one number to use the same size for all). Checked on the uploaded file, before optimization. PHP's `upload_max_filesize` and `post_max_size` must be at least the largest |
+| `limits.total_size`, `limits.files` | `null` | Quota per owner; `null` for no limit |
+| `optimize.enabled` | `false` | Offer image optimization (needs GD) |
+| `optimize.default` | `null` | What the upload form selects first: `null` (keep the original), a preset key or `'custom'`. A page can choose per explorer with `<tansu-explorer optimize="logo">` (also on `<tansu-picker>`) |
+| `optimize.presets` | none | key => `label` (a string or a map by language), `max_width`, `max_height` (fit inside, never enlarge), `quality` (1–100, JPEG and WebP) |
+| `optimize.custom` | 16–4096 px (1920), quality 40–100 (85) | Ranges and defaults of free input; `null` hides it |
+| `optimize.memory_margin` | `2.0` | The estimated memory to decode an image, times this, must fit in the free part of `memory_limit`; otherwise the original is kept |
+| `optimize.max_pixels` | `50_000_000` | Images with more pixels are never decoded, even with `memory_limit = -1`: a PNG of a few kilobytes can stand for gigabytes of pixels. Also applies to turning rotated JPEGs upright when metadata is stripped |
+| `optimize.log_channel` | `null` | Log channel for skipped optimizations (`warning` for memory and missing GD support, `info` for animated images); `null` uses the default |
 
 ### Owners and rights
 

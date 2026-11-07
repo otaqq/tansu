@@ -23,6 +23,7 @@
         "illuminate/routing": "^12.0|^13.0",
         "illuminate/support": "^12.0|^13.0",
         "league/flysystem": "^3.29",
+        "psr/log": "^2.0|^3.0",
         "symfony/polyfill-intl-normalizer": "^1.31"
     },
     "require-dev": {
@@ -30,7 +31,7 @@
         "phpunit/phpunit": "^11.5|^12.5"
     },
     "suggest": {
-        "ext-gd": "Turns photos upright when EXIF metadata is stripped",
+        "ext-gd": "Turns photos upright when EXIF metadata is stripped, and optimizes images",
         "ext-dom": "Needed when SVG uploads are enabled"
     },
     "autoload": {

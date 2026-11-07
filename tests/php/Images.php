@@ -24,14 +24,96 @@ final class Images
         return self::capture(fn (GdImage $image) => imagepng($image), self::halves($width, $height));
     }
 
-    public static function gif(): string
+    public static function gif(int $width = 4, int $height = 4): string
     {
-        return self::capture(fn (GdImage $image) => imagegif($image), self::halves(4, 4));
+        return self::capture(fn (GdImage $image) => imagegif($image), self::halves($width, $height));
     }
 
-    public static function webp(): string
+    public static function webp(int $width = 4, int $height = 4): string
     {
-        return self::capture(fn (GdImage $image) => imagewebp($image), self::halves(4, 4));
+        return self::capture(fn (GdImage $image) => imagewebp($image), self::halves($width, $height));
+    }
+
+    /**
+     * A PNG with a fully transparent left half and an opaque blue right half.
+     */
+    public static function transparentPng(int $width = 40, int $height = 20): string
+    {
+        $image = imagecreatetruecolor($width, $height);
+        imagealphablending($image, false);
+        imagesavealpha($image, true);
+        imagefilledrectangle($image, 0, 0, intdiv($width, 2) - 1, $height - 1, imagecolorallocatealpha($image, 0, 0, 0, 127));
+        imagefilledrectangle($image, intdiv($width, 2), 0, $width - 1, $height - 1, imagecolorallocate($image, 0, 0, 255));
+
+        return self::capture(fn (GdImage $image) => imagepng($image), $image);
+    }
+
+    /**
+     * A 4 × 4 GIF with two 1 × 1 frames, each a graphic control extension and an image.
+     */
+    public static function animatedGif(): string
+    {
+        $frame = "\x21\xF9\x04\x00\x0A\x00\x00\x00"."\x2C\x00\x00\x00\x00\x01\x00\x01\x00\x00"."\x02\x02\x44\x01\x00";
+
+        return "GIF89a\x04\x00\x04\x00\x80\x00\x00\xFF\xFF\xFF\x00\x00\x00".$frame.$frame.';';
+    }
+
+    /**
+     * A WebP whose VP8X header says it is animated.
+     */
+    public static function animatedWebp(): string
+    {
+        $webp = self::webp();
+        $chunk = fn (string $type, string $data) => $type.pack('V', strlen($data)).$data.(strlen($data) % 2 ? "\0" : '');
+        $vp8x = $chunk('VP8X', chr(0x02)."\0\0\0".substr(pack('V', 3), 0, 3).substr(pack('V', 3), 0, 3));
+        $body = $vp8x.substr($webp, 12);
+
+        return 'RIFF'.pack('V', 4 + strlen($body)).'WEBP'.$body;
+    }
+
+    /**
+     * Width and height of an image.
+     *
+     * @return array{int, int}
+     */
+    public static function size(string $bytes): array
+    {
+        $info = getimagesizefromstring($bytes);
+
+        return [$info[0], $info[1]];
+    }
+
+    /**
+     * A minimal PDF: the header, one empty page and the trailer.
+     */
+    public static function pdf(): string
+    {
+        return "%PDF-1.4\n1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n"
+            ."2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n"
+            ."3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 10 10] >> endobj\n"
+            ."trailer << /Root 1 0 R >>\n%%EOF\n";
+    }
+
+    /**
+     * The start of an ISO base media file: an ftyp box with the given major brand, then an empty mdat box.
+     */
+    public static function isoMedia(string $brand = 'mp42'): string
+    {
+        $ftyp = $brand.pack('N', 0).$brand.'isom';
+
+        return pack('N', 8 + strlen($ftyp)).'ftyp'.$ftyp.pack('N', 8).'mdat';
+    }
+
+    /**
+     * The start of a Matroska file: an EBML header with the given doc type.
+     */
+    public static function ebml(string $docType = 'webm'): string
+    {
+        $body = "\x42\x86\x81\x01" // EBMLVersion 1
+            ."\x42\x82".chr(0x80 | strlen($docType)).$docType
+            ."\x42\x87\x81\x04\x42\x85\x81\x02";
+
+        return "\x1A\x45\xDF\xA3".chr(0x80 | strlen($body)).$body."\x18\x53\x80\x67\x80";
     }
 
     /**

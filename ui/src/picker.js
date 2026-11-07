@@ -8,7 +8,7 @@
  *   value       the current value (a path, or a URL with value-type="url")
  *   value-type  "path" (default) or "url": which field of the chosen file becomes the value
  *   src         URL of the current image, for the preview (a host that stores paths knows the URL)
- *   endpoint, owner, csrf-token, lang   passed to the explorer
+ *   endpoint, owner, csrf-token, optimize, lang   passed to the explorer
  *   label       text of the button (default "Choose an image")
  *
  * Events
@@ -92,6 +92,7 @@ export class TansuPicker extends HTMLElement {
       endpoint: this.getAttribute('endpoint'),
       owner: this.getAttribute('owner'),
       'csrf-token': this.getAttribute('csrf-token'),
+      optimize: this.getAttribute('optimize'),
       lang: this.getAttribute('lang'),
       path: this.#folderOfValue(),
     });

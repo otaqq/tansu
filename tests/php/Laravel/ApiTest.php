@@ -8,6 +8,7 @@ use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\GenericUser;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Orchestra\Testbench\TestCase;
 use Otaqq\Tansu\InUseChecker;
@@ -61,11 +62,80 @@ final class ApiTest extends TestCase
 
         $this->getJson('/tansu/info')->assertOk()->assertExactJson([
             'protocol' => 1,
-            'accept' => [['type' => 'image/png', 'extensions' => ['png']]],
-            'limits' => ['file_size' => 1000, 'total_size' => null, 'files' => 5],
+            'accept' => [['type' => 'image/png', 'extensions' => ['png'], 'group' => 'image']],
+            'limits' => ['file_size' => 1000, 'file_sizes' => null, 'total_size' => null, 'files' => 5],
+            'optimize' => ['enabled' => false],
             'usage' => ['size' => 0, 'files' => 0],
             'can' => ['manage' => true],
         ]);
+    }
+
+    public function test_defaults_accept_every_group_with_a_size_per_group(): void
+    {
+        $this->login();
+
+        $info = $this->getJson('/tansu/info')->assertOk();
+        $this->assertSame(['image', 'image', 'image', 'image', 'document', 'video', 'video'], array_column($info->json('accept'), 'group'));
+        $this->assertSame(['image' => 5 * 1024 * 1024, 'document' => 10 * 1024 * 1024, 'video' => 50 * 1024 * 1024], $info->json('limits.file_sizes'));
+        $this->assertSame(50 * 1024 * 1024, $info->json('limits.file_size'));
+    }
+
+    public function test_the_app_config_is_merged_over_the_defaults_at_every_depth(): void
+    {
+        $defaults = require __DIR__.'/../../../lang/php/laravel/config/tansu.php';
+        $merged = TansuServiceProvider::mergeConfig($defaults, [
+            'accept' => ['image'],
+            'limits' => ['file_size' => ['image' => 4 * 1024 * 1024], 'files' => 50],
+            'optimize' => ['enabled' => true, 'custom' => ['quality' => ['default' => 80]]],
+            'routes' => ['middleware' => ['web']],
+        ]);
+
+        $this->assertSame(['image'], $merged['accept']);
+        $this->assertSame(['image' => 4 * 1024 * 1024, 'document' => 10 * 1024 * 1024, 'video' => 50 * 1024 * 1024], $merged['limits']['file_size']);
+        $this->assertSame([null, 50], [$merged['limits']['total_size'], $merged['limits']['files']]);
+        $this->assertTrue($merged['optimize']['enabled']);
+        $this->assertSame(['min' => 40, 'max' => 100, 'default' => 80], $merged['optimize']['custom']['quality']);
+        $this->assertSame(2.0, $merged['optimize']['memory_margin']);
+        $this->assertSame(['web'], $merged['routes']['middleware']);
+        $this->assertSame('tansu', $merged['routes']['prefix']);
+        // A plain value replaces a map, and null hides custom input
+        $this->assertSame(1000, TansuServiceProvider::mergeConfig($defaults, ['limits' => ['file_size' => 1000]])['limits']['file_size']);
+        $this->assertNull(TansuServiceProvider::mergeConfig($defaults, ['optimize' => ['custom' => null]])['optimize']['custom']);
+    }
+
+    public function test_upload_with_an_optimization_preset(): void
+    {
+        config([
+            'tansu.optimize.enabled' => true,
+            'tansu.optimize.presets' => ['logo' => ['label' => ['en' => 'Logo', 'ja' => 'ロゴ'], 'max_width' => 100, 'max_height' => 100]],
+        ]);
+        $this->login();
+
+        $this->getJson('/tansu/info')->assertOk()
+            ->assertJsonPath('optimize.presets.0', ['key' => 'logo', 'label' => ['en' => 'Logo', 'ja' => 'ロゴ'], 'max_width' => 100, 'max_height' => 100, 'quality' => null])
+            ->assertJsonPath('optimize.custom.quality.default', 85);
+        $this->post('/tansu/files', ['path' => '/', 'optimize' => 'logo', 'file' => UploadedFile::fake()->createWithContent('a.jpg', Images::jpeg(400, 200))], ['Accept' => 'application/json'])
+            ->assertCreated()->assertJsonPath('optimized', true)->assertJsonPath('optimization_skipped', null);
+        $this->assertSame([100, 50], Images::size(Storage::disk('public')->get('tansu/users/7/a.jpg')));
+
+        $this->post('/tansu/files', ['path' => '/', 'optimize' => 'custom', 'quality' => '5', 'file' => $this->jpeg()], ['Accept' => 'application/json'])
+            ->assertStatus(422)->assertJsonPath('error.code', 'invalid_request');
+    }
+
+    public function test_skipped_optimizations_go_to_the_configured_log_channel(): void
+    {
+        config([
+            'tansu.optimize.enabled' => true,
+            'tansu.optimize.custom.max_width.min' => 1,
+            'tansu.optimize.log_channel' => 'media',
+        ]);
+        Log::shouldReceive('channel')->once()->with('media')->andReturnSelf();
+        Log::shouldReceive('log')->once()->withArgs(fn ($level, $message, $context) => $level === 'info'
+            && str_contains($message, 'animated') && $context['path'] === '/anim.gif' && $context['owner'] === '7');
+        $this->login();
+
+        $this->post('/tansu/files', ['path' => '/', 'optimize' => 'custom', 'max_width' => '2', 'file' => UploadedFile::fake()->createWithContent('anim.gif', Images::animatedGif())], ['Accept' => 'application/json'])
+            ->assertCreated()->assertJsonPath('optimized', false)->assertJsonPath('optimization_skipped', 'animated');
     }
 
     public function test_upload_list_rename_and_delete(): void
@@ -131,7 +201,7 @@ final class ApiTest extends TestCase
 
         $this->getJson('/tansu/info?owner=c1')->assertOk()
             ->assertJsonPath('can.manage', false)
-            ->assertJsonPath('limits', ['file_size' => 100, 'total_size' => 1000, 'files' => 2]);
+            ->assertJsonPath('limits', ['file_size' => 100, 'file_sizes' => null, 'total_size' => 1000, 'files' => 2]);
         $this->postJson('/tansu/folders?owner=c1', ['path' => '/', 'name' => 'x'])->assertForbidden();
         $this->getJson('/tansu/info?owner=c2')->assertForbidden();
     }

@@ -11,6 +11,10 @@ use League\Flysystem\FileAttributes;
 use League\Flysystem\FilesystemOperator;
 use League\Flysystem\StorageAttributes;
 use Otaqq\Tansu\Content\Inspector;
+use Otaqq\Tansu\Content\Optimizer;
+use Psr\Log\LoggerInterface;
+use Psr\Log\LogLevel;
+use Psr\Log\NullLogger;
 
 /**
  * The operations of the protocol for one owner, on any Flysystem storage.
@@ -21,6 +25,14 @@ use Otaqq\Tansu\Content\Inspector;
 final class Explorer
 {
     public const PROTOCOL = 1;
+
+    /** Skips that point at the server setup are warnings; an animated image is expected */
+    private const SKIP_LEVELS = [
+        'memory' => LogLevel::WARNING,
+        'gd_missing' => LogLevel::WARNING,
+        'format_unsupported' => LogLevel::WARNING,
+        'animated' => LogLevel::INFO,
+    ];
 
     private readonly Limits $limits;
 
@@ -35,9 +47,16 @@ final class Explorer
         private readonly Closure $url,
         private readonly Options $options = new Options(),
         private readonly InUseChecker $inUse = new NothingInUse(),
+        private ?LoggerInterface $logger = null,
+        ?Optimizer $optimizer = null,
     ) {
         $this->limits = $owner->limits ?? $options->limits;
-        $this->inspector = new Inspector($options->types, $options->stripMetadata);
+        $this->logger ??= new NullLogger();
+        $this->inspector = new Inspector(
+            $options->types,
+            $options->stripMetadata,
+            optimizer: $optimizer ?? new Optimizer($options->optimize->memoryMargin, maxPixels: $options->optimize->maxPixels),
+        );
     }
 
     /**
@@ -49,6 +68,7 @@ final class Explorer
             'protocol' => self::PROTOCOL,
             'accept' => $this->options->types->toArray(),
             'limits' => $this->limits->toArray(),
+            'optimize' => $this->options->optimize->toArray(),
             'usage' => $this->usage(),
             'can' => ['manage' => $this->owner->canManage],
         ];
@@ -179,23 +199,46 @@ final class Explorer
      *
      * @param int $size the upload's size in bytes, checked before $contents is read
      * @param Closure(): string $contents reads the upload
-     * @return array<string, mixed> the stored file
+     * @param array<string, mixed> $optimize the upload's `optimize`, `max_width`, `max_height` and `quality` fields
+     * @return array<string, mixed> the stored file, with `optimized` and `optimization_skipped`
      */
-    public function upload(string $folder, mixed $name, int $size, Closure $contents): array
+    public function upload(string $folder, mixed $name, int $size, Closure $contents, array $optimize = []): array
     {
         $this->assertManage();
         $this->assertFolder($folder);
+        $optimization = $this->options->optimize->resolve($optimize);
         if ($size > $this->limits->fileSize) {
             throw TansuException::fileTooLarge();
         }
-        $inspection = $this->inspector->inspect($contents());
+        $bytes = $contents();
+        // The limit of the type's group, before any work
+        if ($size > $this->limits->fileSizeFor($this->inspector->type($bytes))) {
+            throw TansuException::fileTooLarge();
+        }
+        $inspection = $this->inspector->inspect($bytes, $optimization);
+        unset($bytes);
         $this->assertRoom(strlen($inspection->bytes));
 
         $wanted = Name::file(is_string($name) && $name !== '' ? $name : 'file', FileTypes::extension($inspection->type));
         $path = $this->freeName($folder, $wanted);
         $this->storage->write($this->owner->location($path), $inspection->bytes);
 
-        return $this->fileData($this->attributes($path));
+        $skipped = $inspection->optimization?->skipped;
+        if ($skipped !== null) {
+            $this->logger->log(self::SKIP_LEVELS[$skipped] ?? LogLevel::WARNING, "tansu: stored without optimizing ($skipped)", [
+                'owner' => $this->owner->id,
+                'path' => $path,
+                'type' => $inspection->type,
+                ...$inspection->optimization->context,
+                'memory_limit' => (string) ini_get('memory_limit'),
+            ]);
+        }
+
+        return [
+            ...$this->fileData($this->attributes($path)),
+            'optimized' => $inspection->optimization?->optimized ?? false,
+            'optimization_skipped' => $skipped,
+        ];
     }
 
     /**

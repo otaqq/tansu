@@ -8,13 +8,19 @@ use League\Flysystem\Filesystem;
 use League\Flysystem\Local\LocalFilesystemAdapter;
 use Otaqq\Tansu\Explorer;
 use Otaqq\Tansu\FileTypes;
+use Otaqq\Tansu\Content\MetadataStripper;
+use Otaqq\Tansu\Content\Optimizer;
 use Otaqq\Tansu\InUseChecker;
 use Otaqq\Tansu\Limits;
+use Otaqq\Tansu\NothingInUse;
+use Otaqq\Tansu\OptimizeOptions;
 use Otaqq\Tansu\Options;
 use Otaqq\Tansu\Owner;
 use Otaqq\Tansu\TansuException;
 use Otaqq\Tansu\Tests\Images;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\AbstractLogger;
+use Psr\Log\LoggerInterface;
 
 final class ExplorerTest extends TestCase
 {
@@ -35,22 +41,49 @@ final class ExplorerTest extends TestCase
         @rmdir($this->dir);
     }
 
-    private function explorer(?Owner $owner = null, ?Options $options = null, ?InUseChecker $inUse = null): Explorer
+    private function explorer(?Owner $owner = null, ?Options $options = null, ?InUseChecker $inUse = null, ?LoggerInterface $logger = null, ?Optimizer $optimizer = null): Explorer
     {
         return new Explorer(
             $this->storage,
             $owner ?? new Owner('42', 'tansu/42'),
             fn (string $location) => "/storage/$location",
             $options ?? new Options(),
-            ...($inUse ? [$inUse] : []),
+            $inUse ?? new NothingInUse(),
+            $logger,
+            $optimizer,
         );
     }
 
-    private function upload(Explorer $explorer, string $folder, string $name, ?string $bytes = null): array
+    /**
+     * @param array<string, mixed> $optimize
+     */
+    private function upload(Explorer $explorer, string $folder, string $name, ?string $bytes = null, array $optimize = []): array
     {
         $bytes ??= Images::jpeg();
 
-        return $explorer->upload($folder, $name, strlen($bytes), fn () => $bytes);
+        return $explorer->upload($folder, $name, strlen($bytes), fn () => $bytes, $optimize);
+    }
+
+    private static function optimizing(): Options
+    {
+        return new Options(optimize: OptimizeOptions::fromArray([
+            'enabled' => true,
+            'presets' => ['small' => ['label' => 'Small', 'max_width' => 100, 'max_height' => 100, 'quality' => 80]],
+            'custom' => ['max_width' => ['min' => 1, 'max' => 4096, 'default' => 1200]],
+        ]));
+    }
+
+    private static function logger(): LoggerInterface
+    {
+        return new class () extends AbstractLogger {
+            /** @var list<array{string, string, array<string, mixed>}> */
+            public array $records = [];
+
+            public function log($level, string|\Stringable $message, array $context = []): void
+            {
+                $this->records[] = [$level, (string) $message, $context];
+            }
+        };
     }
 
     public function test_an_owner_starts_empty(): void
@@ -67,8 +100,8 @@ final class ExplorerTest extends TestCase
         $info = $this->explorer(new Owner('1', 'o/1', canManage: false, limits: new Limits(100, 1000, 3)))->info();
 
         $this->assertSame(1, $info['protocol']);
-        $this->assertSame(['type' => 'image/jpeg', 'extensions' => ['jpg', 'jpeg']], $info['accept'][0]);
-        $this->assertSame(['file_size' => 100, 'total_size' => 1000, 'files' => 3], $info['limits']);
+        $this->assertSame(['type' => 'image/jpeg', 'extensions' => ['jpg', 'jpeg'], 'group' => 'image'], $info['accept'][0]);
+        $this->assertSame(['file_size' => 100, 'file_sizes' => null, 'total_size' => 1000, 'files' => 3], $info['limits']);
         $this->assertSame(['manage' => false], $info['can']);
     }
 
@@ -116,6 +149,105 @@ final class ExplorerTest extends TestCase
         } catch (TansuException $e) {
             $this->assertSame('not_found', $e->errorCode);
         }
+    }
+
+    public function test_upload_limits_the_size_by_group(): void
+    {
+        $jpeg = Images::jpeg();
+        $explorer = $this->explorer(options: new Options(limits: new Limits(['image' => strlen($jpeg) - 1, 'document' => 10_000])));
+
+        $this->assertSame('application/pdf', $this->upload($explorer, '/', 'a.pdf', Images::pdf())['type']);
+        $this->expectExceptionObject(TansuException::fileTooLarge());
+        $this->upload($explorer, '/', 'a.jpg', $jpeg);
+    }
+
+    public function test_upload_stores_documents_and_videos_as_they_are(): void
+    {
+        $explorer = $this->explorer();
+
+        $pdf = $this->upload($explorer, '/', 'report.PDF', Images::pdf());
+        $video = $this->upload($explorer, '/', 'clip', Images::isoMedia());
+        $this->assertSame(['report.pdf', 'application/pdf'], [$pdf['name'], $pdf['type']]);
+        $this->assertSame(['clip.mp4', 'video/mp4'], [$video['name'], $video['type']]);
+        $this->assertSame(Images::pdf(), file_get_contents($this->dir.'/tansu/42/report.pdf'));
+    }
+
+    public function test_upload_optimizes_when_asked(): void
+    {
+        $explorer = $this->explorer(options: self::optimizing());
+
+        $plain = $this->upload($explorer, '/', 'plain.jpg', Images::jpeg(400, 200));
+        $this->assertSame([false, null], [$plain['optimized'], $plain['optimization_skipped']]);
+        $this->assertSame([400, 200], Images::size(file_get_contents($this->dir.'/tansu/42/plain.jpg')));
+
+        $small = $this->upload($explorer, '/', 'small.jpg', Images::withExif(Images::jpeg(400, 200)), ['optimize' => 'small']);
+        $this->assertSame([true, null], [$small['optimized'], $small['optimization_skipped']]);
+        $stored = file_get_contents($this->dir.'/tansu/42/small.jpg');
+        $this->assertSame([100, 50], Images::size($stored));
+        $this->assertStringNotContainsString('GPS-SECRET', $stored);
+        $this->assertSame(strlen($stored), $small['size']);
+
+        $custom = $this->upload($explorer, '/', 'custom.png', Images::png(400, 200), ['optimize' => 'custom', 'max_width' => '200']);
+        $this->assertSame([200, 100], Images::size(file_get_contents($this->dir.'/tansu/42/custom.png')));
+        $this->assertTrue($custom['optimized']);
+    }
+
+    public function test_upload_refuses_optimizations_the_config_does_not_offer_before_reading(): void
+    {
+        foreach ([[new Options(), ['optimize' => 'small']], [self::optimizing(), ['optimize' => 'huge']]] as [$options, $optimize]) {
+            try {
+                $this->explorer(options: $options)->upload('/', 'a.jpg', 10, fn () => $this->fail('read'), $optimize);
+                $this->fail('no exception');
+            } catch (TansuException $e) {
+                $this->assertSame('invalid_request', $e->errorCode);
+            }
+        }
+    }
+
+    public function test_a_skipped_optimization_is_stored_reported_and_logged(): void
+    {
+        $logger = self::logger();
+        $explorer = $this->explorer(options: self::optimizing(), logger: $logger, optimizer: new Optimizer(freeMemory: fn () => 1000));
+
+        $file = $this->upload($explorer, '/', 'big.jpg', Images::withExif(Images::jpeg(400, 200)), ['optimize' => 'small']);
+        $this->assertSame([false, 'memory'], [$file['optimized'], $file['optimization_skipped']]);
+        $stored = file_get_contents($this->dir.'/tansu/42/big.jpg');
+        $this->assertSame([400, 200], Images::size($stored));
+        $this->assertStringNotContainsString('GPS-SECRET', $stored, 'metadata is still stripped');
+
+        $this->assertCount(1, $logger->records);
+        [$level, $message, $context] = $logger->records[0];
+        $this->assertSame('warning', $level);
+        $this->assertStringContainsString('memory', $message);
+        $this->assertSame('42', $context['owner']);
+        $this->assertSame('/big.jpg', $context['path']);
+        $this->assertSame('image/jpeg', $context['type']);
+        $this->assertSame([400, 200], [$context['width'], $context['height']]);
+        $this->assertSame(1000, $context['free_memory']);
+        $this->assertGreaterThan(1000, $context['estimated_memory']);
+        $this->assertArrayHasKey('memory_limit', $context);
+    }
+
+    public function test_a_rotated_photo_skipped_for_memory_is_not_decoded_to_turn_it_upright(): void
+    {
+        $explorer = $this->explorer(options: self::optimizing(), optimizer: new Optimizer(freeMemory: fn () => 1000));
+
+        $file = $this->upload($explorer, '/', 'phone.jpg', Images::withExif(Images::jpeg(400, 200), 6), ['optimize' => 'small']);
+        $this->assertSame('memory', $file['optimization_skipped']);
+        $stored = file_get_contents($this->dir.'/tansu/42/phone.jpg');
+        $this->assertSame([400, 200], Images::size($stored));
+        $this->assertSame(6, MetadataStripper::jpegOrientation($stored));
+        $this->assertStringNotContainsString('GPS-SECRET', $stored);
+    }
+
+    public function test_animated_images_are_logged_as_info(): void
+    {
+        $logger = self::logger();
+        $explorer = $this->explorer(options: self::optimizing(), logger: $logger);
+
+        $file = $this->upload($explorer, '/', 'anim.gif', Images::animatedGif(), ['optimize' => 'custom', 'max_width' => '2']);
+        $this->assertSame('animated', $file['optimization_skipped']);
+        $this->assertSame('info', $logger->records[0][0]);
     }
 
     public function test_upload_rejects_content_of_other_types(): void

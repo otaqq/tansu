@@ -103,6 +103,28 @@ describe('TansuClient', () => {
     assert.equal(sent.form.get('path'), '/f');
     assert.equal(sent.form.get('file').name, 'a.jpg');
     assert.deepEqual(progress, [0.25]);
+    assert.equal(sent.form.get('optimize'), null);
+  });
+
+  it('sends extra fields with an upload (optimization)', async () => {
+    const sent = {};
+    const xhr = {
+      open() {},
+      setRequestHeader() {},
+      send(form) {
+        sent.form = form;
+        this.status = 201;
+        this.responseText = '{}';
+        this.onload();
+      },
+    };
+    const client = new TansuClient({ endpoint: '/t', fetch: () => {}, xhr: () => xhr });
+
+    await client.upload('/', new File(['x'], 'a.jpg'), { fields: { optimize: 'custom', max_width: 800, quality: undefined } });
+
+    assert.equal(sent.form.get('optimize'), 'custom');
+    assert.equal(sent.form.get('max_width'), '800');
+    assert.equal(sent.form.has('quality'), false);
   });
 
   it('rejects uploads with the protocol error', async () => {

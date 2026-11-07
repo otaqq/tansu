@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Otaqq\Tansu\Tests\Core;
 
+use Otaqq\Tansu\Content\MemoryGuard;
 use Otaqq\Tansu\Content\MetadataStripper;
 use Otaqq\Tansu\Tests\Images;
 use PHPUnit\Framework\TestCase;
@@ -31,6 +32,18 @@ final class MetadataStripperTest extends TestCase
         $this->assertSame([20, 40], [$width, $height]);
         $this->assertGreaterThan(200, Images::colorAt($stripped, 10, 5)[0], 'red on top');
         $this->assertGreaterThan(200, Images::colorAt($stripped, 10, 35)[2], 'blue at the bottom');
+    }
+
+    public function test_keeps_only_the_orientation_when_turning_upright_would_not_fit_in_memory(): void
+    {
+        $jpeg = Images::withExif(Images::jpeg(400, 200), 6);
+        $stripped = (new MetadataStripper(memory: new MemoryGuard(freeMemory: fn () => 1000)))->strip('image/jpeg', $jpeg);
+
+        $this->assertStringNotContainsString('GPS-SECRET', $stripped);
+        $this->assertStringNotContainsString('XMP-SECRET', $stripped);
+        $this->assertSame([400, 200], Images::size($stripped), 'not decoded');
+        $this->assertSame(6, MetadataStripper::jpegOrientation($stripped));
+        $this->assertNotFalse(imagecreatefromstring($stripped));
     }
 
     public function test_orientation_8_rotates_counter_clockwise(): void

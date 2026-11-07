@@ -60,6 +60,11 @@ final class TansuException extends RuntimeException
         return new self('type_not_allowed', 415, 'This type of file is not allowed.');
     }
 
+    public static function invalidRequest(string $message): self
+    {
+        return new self('invalid_request', 422, $message);
+    }
+
     public static function quotaExceeded(): self
     {
         return new self('quota_exceeded', 422, 'There is not enough room left for this file.');

@@ -9,6 +9,8 @@ namespace Otaqq\Tansu\Content;
  *
  * A JPEG whose EXIF orientation says it is rotated or mirrored is re-encoded upright with GD instead
  * (when GD is available), because dropping the orientation alone would show it the wrong way round.
+ * When decoding it might not fit in memory (MemoryGuard), or GD is missing, it is not decoded: a minimal EXIF
+ * segment with only the orientation is kept instead.
  */
 final class MetadataStripper
 {
@@ -19,8 +21,10 @@ final class MetadataStripper
 
     private const WEBP_DROP = ['EXIF', 'XMP '];
 
-    public function __construct(private readonly int $jpegQuality = 90)
-    {
+    public function __construct(
+        private readonly int $jpegQuality = 90,
+        private readonly MemoryGuard $memory = new MemoryGuard(),
+    ) {
     }
 
     public function strip(string $type, string $bytes): string
@@ -63,11 +67,20 @@ final class MetadataStripper
         }
         $out .= substr($bytes, $pos);
 
-        if ($orientation !== 1 && function_exists('imagecreatefromstring')) {
-            return $this->upright($out, $orientation) ?? $out;
+        if ($orientation === 1) {
+            return $out;
+        }
+        $size = @getimagesizefromstring($out);
+        // Decoding needs the image and the turned copy
+        if ($size !== false && function_exists('imagecreatefromstring')
+            && $this->memory->refuse($size[0], $size[1], $size[0] * $size[1] * 8) === null) {
+            $upright = $this->upright($out, $orientation);
+            if ($upright !== null) {
+                return $upright;
+            }
         }
 
-        return $out;
+        return "\xFF\xD8".self::orientationSegment($orientation).substr($out, 2);
     }
 
     /**
@@ -101,13 +114,54 @@ final class MetadataStripper
         return 1;
     }
 
-    private function upright(string $jpeg, int $orientation): ?string
+    /**
+     * The EXIF orientation of a JPEG (1 to 8); 1 when it has none or it cannot be read.
+     */
+    public static function jpegOrientation(string $bytes): int
     {
-        $image = @imagecreatefromstring($jpeg);
-        if ($image === false) {
-            return null;
+        if (!str_starts_with($bytes, "\xFF\xD8")) {
+            return 1;
         }
-        $image = match ($orientation) {
+        $pos = 2;
+        $length = strlen($bytes);
+        while ($pos + 4 <= $length && $bytes[$pos] === "\xFF") {
+            $marker = ord($bytes[$pos + 1]);
+            if ($marker === 0xFF) {
+                $pos++;
+                continue;
+            }
+            if ($marker === 0xDA || $marker === 0xD9) {
+                break;
+            }
+            $size = unpack('n', $bytes, $pos + 2)[1];
+            if ($marker === 0xE1 && substr($bytes, $pos + 4, 6) === "Exif\0\0") {
+                return self::orientation(substr($bytes, $pos + 10, $size - 8));
+            }
+            $pos += 2 + $size;
+        }
+
+        return 1;
+    }
+
+    /**
+     * An APP1 EXIF segment with only the orientation tag.
+     */
+    private static function orientationSegment(int $orientation): string
+    {
+        $tiff = 'MM'.pack('n', 42).pack('N', 8)
+            .pack('n', 1).pack('n', 0x0112).pack('n', 3).pack('N', 1).pack('n', $orientation).pack('n', 0)
+            .pack('N', 0);
+        $exif = "Exif\0\0".$tiff;
+
+        return "\xFF\xE1".pack('n', 2 + strlen($exif)).$exif;
+    }
+
+    /**
+     * Turns a decoded image upright for an EXIF orientation.
+     */
+    public static function orient(\GdImage $image, int $orientation): \GdImage|false
+    {
+        return match ($orientation) {
             2 => self::flip($image, IMG_FLIP_HORIZONTAL),
             3 => imagerotate($image, 180, 0),
             4 => self::flip($image, IMG_FLIP_VERTICAL),
@@ -117,6 +171,15 @@ final class MetadataStripper
             8 => imagerotate($image, 90, 0),
             default => $image,
         };
+    }
+
+    private function upright(string $jpeg, int $orientation): ?string
+    {
+        $image = @imagecreatefromstring($jpeg);
+        if ($image === false) {
+            return null;
+        }
+        $image = self::orient($image, $orientation);
         if ($image === false) {
             return null;
         }
