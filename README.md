@@ -44,6 +44,60 @@ flowchart LR
     api -.-> other
 ```
 
+## Laravel
+
+```sh
+composer require otaqq/tansu
+php artisan vendor:publish --tag=tansu-config   # config/tansu.php
+php artisan vendor:publish --tag=tansu-assets   # public/vendor/tansu (also published with laravel-assets)
+php artisan storage:link                        # when files are on the "public" disk (the default)
+```
+
+The routes are registered under `/tansu` with the `web` and `auth` middleware. Out of the box each logged-in user gets their own root, `tansu/users/{id}` on the `public` disk.
+
+```html
+<meta name="csrf-token" content="{{ csrf_token() }}">
+<script type="module" src="{{ asset('vendor/tansu/tansu.js') }}"></script>
+
+<!-- A full explorer -->
+<tansu-explorer endpoint="{{ url('tansu') }}"></tansu-explorer>
+
+<!-- A form field: opens the explorer in a modal and submits the chosen file's path -->
+<tansu-picker name="image" endpoint="{{ url('tansu') }}" value="{{ $post->image }}" src="{{ $post->image_url }}"></tansu-picker>
+```
+
+### Owners and rights
+
+Implement `Otaqq\Tansu\Laravel\OwnerResolver` and set it as `owner_resolver`. It gets the request and the `owner` query parameter (set by the `owner` attribute of the elements), and returns an `Otaqq\Tansu\Owner`: the owner's root on the disk, whether the user may change anything, and optionally the owner's own limits. Throw `AuthorizationException` when the user may not access the owner.
+
+```php
+final class CompanyOwnerResolver implements OwnerResolver
+{
+    public function resolve(Request $request, ?string $requested): Owner
+    {
+        $company = $request->user()->isAdmin() && $requested !== null
+            ? Company::findOrFail($requested)
+            : $request->user()->company;
+        Gate::authorize('view', $company);
+
+        return new Owner(
+            id: (string) $company->id,
+            root: "tansu/companies/{$company->id}",
+            canManage: Gate::allows('update', $company),
+            limits: new Limits(fileSize: 2 * 1024 * 1024, totalSize: 10 * 1024 * 1024, files: 50),
+        );
+    }
+}
+```
+
+### Files the app uses
+
+The picker submits a path relative to the owner's root (`/photos/shop.jpg`). `Otaqq\Tansu\Laravel\Tansu::location($owner, $path)` turns it into the location on the disk, or `null` when the path is not valid. To keep users from renaming or deleting files that records still point at, implement `Otaqq\Tansu\InUseChecker` and set it as `in_use_checker`.
+
+### Private files
+
+With `'url' => 'route'`, file URLs go through `GET /tansu/raw`, which applies the same OwnerResolver, so files can live on a private disk.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).

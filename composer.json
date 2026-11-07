@@ -1,14 +1,37 @@
 {
     "name": "otaqq/tansu",
     "description": "Lightweight media explorer for web apps: per-owner folders, uploads and an image picker, with dependency-free Web Components.",
-    "keywords": ["media", "file manager", "media library", "image picker", "web components", "laravel"],
+    "keywords": [
+        "media",
+        "file manager",
+        "media library",
+        "image picker",
+        "web components",
+        "laravel"
+    ],
     "type": "library",
     "license": "MIT",
     "authors": [
-        { "name": "otaqq" }
+        {
+            "name": "otaqq"
+        }
     ],
     "require": {
-        "php": "^8.3"
+        "php": "^8.3",
+        "illuminate/filesystem": "^12.0|^13.0",
+        "illuminate/http": "^12.0|^13.0",
+        "illuminate/routing": "^12.0|^13.0",
+        "illuminate/support": "^12.0|^13.0",
+        "league/flysystem": "^3.29",
+        "symfony/polyfill-intl-normalizer": "^1.31"
+    },
+    "require-dev": {
+        "orchestra/testbench": "^10.0|^11.0",
+        "phpunit/phpunit": "^11.5|^12.5"
+    },
+    "suggest": {
+        "ext-gd": "Turns photos upright when EXIF metadata is stripped",
+        "ext-dom": "Needed when SVG uploads are enabled"
     },
     "autoload": {
         "psr-4": {
@@ -19,6 +42,13 @@
     "autoload-dev": {
         "psr-4": {
             "Otaqq\\Tansu\\Tests\\": "tests/php/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Otaqq\\Tansu\\Laravel\\TansuServiceProvider"
+            ]
         }
     },
     "minimum-stability": "stable",

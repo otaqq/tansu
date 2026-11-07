@@ -2,8 +2,23 @@
 node = "26"
 
 # PHP runs in a container so the host needs nothing but Docker
+[tasks."php:image"]
+run = "docker build -q -t tansu-php tests/php >/dev/null"
+
 [tasks.composer]
-run = "docker run --rm -it -u $(id -u):$(id -g) -e COMPOSER_HOME=/tmp/composer -v $PWD:/app -w /app composer:2"
+depends = ["php:image"]
+run = "docker run --rm -u $(id -u):$(id -g) -v $PWD:/app tansu-php composer"
+
+[tasks.php]
+depends = ["php:image"]
+run = "docker run --rm -u $(id -u):$(id -g) -v $PWD:/app tansu-php php"
 
 [tasks."test:php"]
-run = "docker run --rm -u $(id -u):$(id -g) -v $PWD:/app -w /app composer:2 vendor/bin/phpunit"
+depends = ["php:image"]
+run = "docker run --rm -u $(id -u):$(id -g) -v $PWD:/app tansu-php vendor/bin/phpunit"
+
+[tasks."test:ui"]
+run = "node --test ui/test/"
+
+[tasks.test]
+depends = ["test:php", "test:ui"]
