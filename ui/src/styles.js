@@ -20,12 +20,12 @@ const tokens = `
 
 const controls = `
   [hidden] { display: none !important; }
-  button {
-    font: inherit; color: inherit; cursor: pointer;
+  button, a.button {
+    font: inherit; color: inherit; cursor: pointer; text-decoration: none; display: inline-block;
     border: 1px solid var(--_border); border-radius: var(--_radius);
     background: var(--_background); padding: 0.35em 0.8em;
   }
-  button:hover:not(:disabled) { background: var(--_surface); }
+  button:hover:not(:disabled), a.button:hover { background: var(--_surface); }
   button:disabled { opacity: 0.5; cursor: default; }
   button.primary { background: var(--_accent); border-color: var(--_accent); color: var(--_accent-contrast); }
   button.primary:hover:not(:disabled) { background: color-mix(in srgb, var(--_accent) 85%, #000); }
@@ -87,7 +87,7 @@ export const explorerStyles = `
     border-radius: calc(var(--_radius) - 2px); background: var(--_surface);
   }
   .thumb img { width: 100%; height: 100%; object-fit: contain; }
-  .thumb svg { width: 50%; height: 50%; fill: var(--_muted); }
+  .thumb svg, .preview svg { width: 50%; height: 50%; fill: var(--_muted); }
   .name { font-size: 0.85em; overflow-wrap: anywhere; line-height: 1.3; }
   .message { color: var(--_muted); padding: 2rem 1rem; text-align: center; grid-column: 1 / -1; }
   .drop {

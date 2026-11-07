@@ -55,6 +55,10 @@ test('creates, opens, renames and deletes folders', async ({ page }) => {
 
   await explorer.locator('.crumbs').getByRole('button', { name: 'All files' }).click();
   await explorer.getByRole('option', { name: 'photos' }).click();
+  // The folder icon in the details is styled like the one in the grid (not a huge black shape)
+  const icon = await explorer.locator('.details .preview svg').boundingBox();
+  const preview = await explorer.locator('.details .preview').boundingBox();
+  expect(icon.width).toBeLessThanOrEqual(preview.width / 2 + 1);
   await explorer.locator('.details').getByRole('button', { name: 'Rename' }).click();
   await dialog.getByRole('textbox').fill('images');
   await dialog.getByRole('button', { name: 'OK' }).click();

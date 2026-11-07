@@ -367,7 +367,7 @@ export class TansuExplorer extends HTMLElement {
         h('dt', {}, t('modified')), h('dd', {}, formatDate(item.modified, lang))),
       h('div', { class: 'actions' },
         this.hasAttribute('selectable') ? h('button', { type: 'button', class: 'primary', onclick: () => this.#choose(item) }, t('choose')) : null,
-        h('a', { href: item.url, target: '_blank', rel: 'noopener', part: 'link' }, t('open')),
+        h('a', { href: item.url, target: '_blank', rel: 'noopener', class: 'button', part: 'link' }, t('open')),
         manage));
   }
 
