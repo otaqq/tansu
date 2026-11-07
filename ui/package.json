@@ -2,9 +2,22 @@
   "name": "@otaqq/tansu",
   "version": "0.0.0",
   "description": "Dependency-free Web Components for the tansu media explorer: a folder tree, a grid of files and an image picker. No build step.",
-  "keywords": ["media", "file manager", "image picker", "web components", "custom elements"],
+  "keywords": [
+    "media",
+    "file manager",
+    "image picker",
+    "web components",
+    "custom elements"
+  ],
   "license": "MIT",
   "author": "otaqq",
   "type": "module",
-  "private": true
+  "private": true,
+  "scripts": {
+    "test": "node --test test/",
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.65.0"
+  }
 }

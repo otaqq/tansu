@@ -142,10 +142,16 @@ export class TansuExplorer extends HTMLElement {
     this.refresh();
   }
 
+  // Answers to an older client (endpoint or owner changed since) or for another folder are dropped,
+  // so a slow response cannot overwrite a newer one.
   async #loadInfo() {
+    const client = this.#client;
     try {
-      this.#info = await this.#client.info();
+      const info = await client.info();
+      if (client !== this.#client) return;
+      this.#info = info;
     } catch (error) {
+      if (client !== this.#client) return;
       this.#fail(error);
     }
     this.#renderToolbar();
@@ -154,9 +160,13 @@ export class TansuExplorer extends HTMLElement {
   }
 
   async #loadTree() {
+    const client = this.#client;
     try {
-      this.#tree = (await this.#client.tree()).root;
+      const { root } = await client.tree();
+      if (client !== this.#client) return;
+      this.#tree = root;
     } catch (error) {
+      if (client !== this.#client) return;
       this.#tree = null;
       this.#fail(error);
     }
@@ -164,11 +174,17 @@ export class TansuExplorer extends HTMLElement {
   }
 
   async #loadFolder() {
+    const client = this.#client;
+    const path = this.#path;
+    const stale = () => client !== this.#client || path !== this.#path;
     this.#loading = true;
     this.#renderGrid();
     try {
-      this.#listing = await this.#client.folder(this.#path);
+      const listing = await client.folder(path);
+      if (stale()) return;
+      this.#listing = listing;
     } catch (error) {
+      if (stale()) return;
       if (error instanceof TansuError && error.code === 'not_found' && this.#path !== '/') {
         this.#path = '/';
         this.setAttribute('path', '/');

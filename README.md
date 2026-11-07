@@ -98,6 +98,21 @@ The picker submits a path relative to the owner's root (`/photos/shop.jpg`). `Ot
 
 With `'url' => 'route'`, file URLs go through `GET /tansu/raw`, which applies the same OwnerResolver, so files can live on a private disk.
 
+## Development
+
+You need [mise](https://mise.jdx.dev/) (it installs Node) and Docker (PHP runs in a container built from [tests/php/Dockerfile](tests/php/Dockerfile): the lowest supported PHP with GD).
+
+```sh
+mise run setup      # composer install, npm ci, Playwright's Chromium
+mise run dev        # http://localhost:8080: a demo page with the explorer and a picker in a form
+mise run test       # everything below
+mise run test:php   # PHPUnit: the core and the Laravel integration (Orchestra Testbench)
+mise run test:ui    # node:test: the API client and messages
+mise run test:e2e   # Playwright: the components in Chromium against the development server
+```
+
+The development server ([dev/server.php](dev/server.php)) implements the protocol on the PHP core alone, without a framework, and keeps files in `dev/storage`. It has no authentication: use it only on your machine. Add `?owner=other` to see another owner's files, `?owner=readonly` for a user who may only look, and `?lang=ja` for Japanese.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).

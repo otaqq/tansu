@@ -5,6 +5,14 @@ node = "26"
 [tasks."php:image"]
 run = "docker build -q -t tansu-php tests/php >/dev/null"
 
+[tasks.setup]
+description = "Install PHP and npm dependencies and the browser for the E2E tests"
+depends = ["php:image"]
+run = [
+  "docker run --rm -u $(id -u):$(id -g) -v $PWD:/app tansu-php composer install",
+  "cd ui && npm ci && npx playwright install chromium",
+]
+
 [tasks.composer]
 depends = ["php:image"]
 run = "docker run --rm -u $(id -u):$(id -g) -v $PWD:/app tansu-php composer"
@@ -13,12 +21,22 @@ run = "docker run --rm -u $(id -u):$(id -g) -v $PWD:/app tansu-php composer"
 depends = ["php:image"]
 run = "docker run --rm -u $(id -u):$(id -g) -v $PWD:/app tansu-php php"
 
+[tasks.dev]
+description = "Development server with a demo page: http://localhost:8080 (TANSU_DEV_PORT to change)"
+depends = ["php:image"]
+run = "docker run --rm -it --init -u $(id -u):$(id -g) -p ${TANSU_DEV_PORT:-8080}:8080 -v $PWD:/app tansu-php php -S 0.0.0.0:8080 dev/server.php"
+
 [tasks."test:php"]
 depends = ["php:image"]
 run = "docker run --rm -u $(id -u):$(id -g) -v $PWD:/app tansu-php vendor/bin/phpunit"
 
 [tasks."test:ui"]
-run = "node --test ui/test/"
+run = "cd ui && npm test"
+
+[tasks."test:e2e"]
+description = "Browser tests against the development server (starts it on port 8090)"
+depends = ["php:image"]
+run = "cd ui && npx playwright test"
 
 [tasks.test]
-depends = ["test:php", "test:ui"]
+depends = ["test:php", "test:ui", "test:e2e"]

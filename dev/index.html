@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>tansu dev</title>
+  <script type="module" src="/ui/tansu.js"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0 auto; max-width: 72rem; padding: 1rem; color: #1f2328; }
+    nav { display: flex; gap: 1rem; flex-wrap: wrap; align-items: center; margin-bottom: 1rem; }
+    section { margin-bottom: 2rem; }
+    pre { background: #f6f8fa; padding: 0.75rem; overflow: auto; font-size: 0.85em; }
+  </style>
+</head>
+<body>
+  <h1>tansu dev</h1>
+  <nav>
+    <label>Owner <select id="owner"><option>demo</option><option>other</option><option>readonly</option></select></label>
+    <label>Language <select id="lang"><option>en</option><option>ja</option></select></label>
+  </nav>
+
+  <section>
+    <h2>&lt;tansu-explorer&gt;</h2>
+    <tansu-explorer id="explorer" endpoint="/api"></tansu-explorer>
+  </section>
+
+  <section>
+    <h2>&lt;tansu-picker&gt; in a form</h2>
+    <form id="form">
+      <tansu-picker id="picker" name="image" endpoint="/api"></tansu-picker>
+      <p><button type="submit">Submit</button> <button type="reset">Reset</button></p>
+    </form>
+    <pre id="submitted"></pre>
+  </section>
+
+  <section>
+    <h2>Events</h2>
+    <pre id="events"></pre>
+  </section>
+
+  <script type="module">
+    const explorer = document.getElementById('explorer');
+    const picker = document.getElementById('picker');
+    const params = new URLSearchParams(location.search);
+    const owner = document.getElementById('owner');
+    const lang = document.getElementById('lang');
+    owner.value = params.get('owner') || 'demo';
+    lang.value = params.get('lang') || 'en';
+    document.documentElement.lang = lang.value;
+    for (const element of [explorer, picker]) element.setAttribute('owner', owner.value);
+    for (const select of [owner, lang]) {
+      select.addEventListener('change', () => {
+        params.set(select.id, select.value);
+        location.search = params;
+      });
+    }
+
+    const log = document.getElementById('events');
+    for (const type of ['tansu-select', 'tansu-change', 'tansu-error']) {
+      document.addEventListener(type, (event) => {
+        const detail = { ...event.detail, error: event.detail.error && { code: event.detail.error.code } };
+        log.textContent = `${type} ${JSON.stringify(detail)}\n${log.textContent}`.slice(0, 4000);
+      });
+    }
+    document.getElementById('form').addEventListener('submit', (event) => {
+      event.preventDefault();
+      document.getElementById('submitted').textContent = JSON.stringify(Object.fromEntries(new FormData(event.target)));
+    });
+  </script>
+</body>
+</html>

@@ -12,3 +12,7 @@
 /phpunit.xml export-ignore
 /ui/test export-ignore
 /ui/package.json export-ignore
+/dev export-ignore
+/ui/e2e export-ignore
+/ui/playwright.config.js export-ignore
+/ui/package-lock.json export-ignore

@@ -3,3 +3,6 @@
 node_modules/
 /.phpunit.cache/
 /tmp/
+/dev/storage/
+/ui/test-results/
+/ui/playwright-report/

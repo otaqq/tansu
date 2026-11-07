@@ -19,6 +19,7 @@ const tokens = `
 `;
 
 const controls = `
+  [hidden] { display: none !important; }
   button {
     font: inherit; color: inherit; cursor: pointer;
     border: 1px solid var(--_border); border-radius: var(--_radius);
