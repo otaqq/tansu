@@ -146,6 +146,10 @@ mise run test:e2e   # Playwright: the components in Chromium against the develop
 
 The development server ([dev/server.php](dev/server.php)) implements the protocol on the PHP core alone, without a framework, and keeps files in `dev/storage`. It has no authentication: use it only on your machine. Add `?owner=other` to see another owner's files, `?owner=readonly` for a user who may only look, `?owner=tiny` for an owner with room for one file, and `?lang=ja` for Japanese.
 
+## Releasing
+
+Push an annotated tag `vX.Y.Z` to GitHub; the `release` workflow creates the GitHub release with the tag's message as the notes (write them with `git tag -a vX.Y.Z -F notes.md`). A tag whose message is only its name gets notes generated from the commits. For a tag pushed before the workflow existed, run the workflow by hand with the tag (Actions → release → Run workflow). Composer reads the tags; Packagist is not used yet.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).
