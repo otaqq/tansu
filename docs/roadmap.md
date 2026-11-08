@@ -143,6 +143,15 @@ Off unless the app turns it on. When on, the person uploading chooses, per uploa
   - UI: the upload list shows a warning on that file ("Stored without optimizing: not enough memory", and so on, in `en` and `ja`). The message stays until the person closes it.
   - Log: one entry per skip through the PSR-3 logger (Laravel: `optimize.log_channel`). `warning` for `memory`, `gd_missing` and `format_unsupported`, which point at the server setup; `info` for `animated`. The context has the owner, path, type, width × height, the estimated and the free memory (bytes) and `memory_limit`. No file content and no user data beyond the owner key.
 
+## v0.3 — limits in sight
+
+The explorer shows the limits before people run into them. UI only: `GET /info` already has everything.
+
+- **Limits next to the upload button**: the largest file, per group when the sizes differ ("Images up to 5 MB · Documents up to 10 MB · Videos up to 50 MB"), else once ("Up to 4 MB per file"), then the accepted types.
+- **Usage meter**: the used share of the quota (the larger of total size and file count) as a bar next to the usage text, `role="meter"` with `aria-valuenow` in percent. At 90 % it turns to `--tansu-warning`, when full to `--tansu-danger`.
+- **Full quota**: when every file is used or no byte is left, the upload button is disabled with the reason as its title, drops are refused with the reason in the status line, and the reason stays under the meter ("No room left: 100 of 100 files are used. Delete files to upload more."). Deleting files makes room again. The back end still checks every upload (`quota_exceeded`): a quota that is nearly full can still refuse a large file.
+- Pure helpers in `ui/src/quota.js` (`limitsSummary`, `quotaState`); texts in `en` and `ja`.
+
 ## Later
 
 - `conformance/`: HTTP-level test suite for any back end

@@ -10,7 +10,7 @@ Most file managers for web frameworks still ship jQuery, Bootstrap or a Vue bund
 
 - **No dependencies in the browser.** The UI is a set of Web Components (custom elements) shipped as plain ES modules. No jQuery, no Alpine, no framework, no bundler. It works next to whatever the host page already uses.
 - **CSS-framework neutral.** A small stylesheet with CSS custom properties, so it fits Bulma, Bootstrap or a hand-written theme.
-- **Owners and quotas built in.** Files live in a per-owner root; the host app decides who the owner is and who may do what. Limits per file (one size, or a size per group: images, documents, videos) and per owner (total size, file count).
+- **Owners and quotas built in.** Files live in a per-owner root; the host app decides who the owner is and who may do what. Limits per file (one size, or a size per group: images, documents, videos) and per owner (total size, file count). The explorer shows them before an upload: the largest file and the accepted types, a usage meter, and a disabled upload button with the reason when the quota is full.
 - **Safe defaults.** Uploads are checked by content, not by extension; SVG is off unless enabled (and is sanitized when it is); file names are normalized; EXIF metadata is stripped from images.
 - **Optional image optimization.** When the app turns it on, the person uploading chooses per upload to keep the original, use a preset (such as "Logo, 600 × 600") or enter a size and quality. Images that cannot be processed safely (animated, or too large for the memory) are stored as they are, and the person and the log are told.
 - **One protocol, many back ends.** The UI talks to the server over a small, documented HTTP JSON API ([protocol/](protocol)). The PHP/Laravel back end comes first; other languages can implement the same API.
@@ -144,7 +144,7 @@ mise run test:ui    # node:test: the API client and messages
 mise run test:e2e   # Playwright: the components in Chromium against the development server
 ```
 
-The development server ([dev/server.php](dev/server.php)) implements the protocol on the PHP core alone, without a framework, and keeps files in `dev/storage`. It has no authentication: use it only on your machine. Add `?owner=other` to see another owner's files, `?owner=readonly` for a user who may only look, and `?lang=ja` for Japanese.
+The development server ([dev/server.php](dev/server.php)) implements the protocol on the PHP core alone, without a framework, and keeps files in `dev/storage`. It has no authentication: use it only on your machine. Add `?owner=other` to see another owner's files, `?owner=readonly` for a user who may only look, `?owner=tiny` for an owner with room for one file, and `?lang=ja` for Japanese.
 
 ## License
 

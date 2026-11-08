@@ -20,6 +20,7 @@ import { TansuClient, TansuError } from './api.js';
 import { adoptStyles, h, replace } from './dom.js';
 import { formatDate, formatSize, languageOf, translator } from './i18n.js';
 import { fileGroup, fileSizeLimit, initialOptimize, labelOf, optimizeFields } from './optimize.js';
+import { limitsSummary, quotaState } from './quota.js';
 import { explorerStyles } from './styles.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -149,6 +150,11 @@ export class TansuExplorer extends HTMLElement {
     return Boolean(this.#info?.can?.manage);
   }
 
+  /** The owner's quota is used up: nothing more can be uploaded. */
+  get #full() {
+    return Boolean(this.#info && quotaState(this.#info)?.full);
+  }
+
   #reconnect() {
     const endpoint = this.getAttribute('endpoint');
     if (!endpoint) return;
@@ -235,6 +241,7 @@ export class TansuExplorer extends HTMLElement {
       tree: h('nav', { class: 'tree', part: 'tree', 'aria-label': t('root') }),
       crumbs: h('div', { class: 'crumbs' }),
       buttons: h('div', { class: 'actions' }),
+      limits: h('p', { class: 'limits', part: 'limits', hidden: true }),
       optimize: h('div', { class: 'optimize', part: 'optimize', hidden: true }),
       grid: h('div', { class: 'grid', part: 'grid', role: 'listbox', 'aria-label': t('root') }),
       uploads: h('ul', { class: 'uploads', part: 'uploads' }),
@@ -246,6 +253,7 @@ export class TansuExplorer extends HTMLElement {
     };
     const main = h('div', { class: 'main' },
       h('div', { class: 'toolbar', part: 'toolbar' }, this.#els.crumbs, this.#els.buttons),
+      this.#els.limits,
       this.#els.optimize,
       this.#els.grid, this.#els.uploads, this.#els.status, this.#els.usage, this.#els.drop);
     main.addEventListener('dragenter', (event) => this.#onDrag(event, 1));
@@ -258,6 +266,11 @@ export class TansuExplorer extends HTMLElement {
       event.preventDefault();
       this.#dragDepth = 0;
       this.#els.drop.hidden = true;
+      if (this.#full) {
+        this.#status = this.#fullMessage();
+        this.#renderStatus();
+        return;
+      }
       this.#upload([...(event.dataTransfer?.files || [])]);
     });
     this.#els.layout = h('div', { class: 'layout', part: 'layout' }, this.#els.tree, main, this.#els.details);
@@ -312,10 +325,43 @@ export class TansuExplorer extends HTMLElement {
       this.#els.input.accept = this.#info.accept
         .flatMap((type) => [type.type, ...type.extensions.map((extension) => `.${extension}`)]).join(',');
     }
+    const full = this.#full;
     replace(this.#els.buttons, this.#canManage ? [
       h('button', { type: 'button', onclick: () => this.#createFolder() }, t('newFolder')),
-      h('button', { type: 'button', class: 'primary', onclick: () => this.#els.input.click() }, t('upload')),
+      h('button', {
+        type: 'button',
+        class: 'primary',
+        disabled: full,
+        title: full ? this.#fullMessage() : null,
+        onclick: () => this.#els.input.click(),
+      }, t('upload')),
     ] : null);
+    this.#renderLimits();
+  }
+
+  /** The largest file (per group) and the accepted types, next to the upload button. */
+  #renderLimits() {
+    const element = this.#els.limits;
+    element.hidden = !this.#info || !this.#canManage;
+    if (element.hidden) {
+      replace(element);
+      return;
+    }
+    const t = this.#t;
+    const lang = this.#lang;
+    const { sizes, types } = limitsSummary(this.#info);
+    const parts = sizes.map(({ group, max }) => t(group ? `limits.${group}` : 'limits.one', { max: formatSize(max, lang) }));
+    replace(element, [...parts, types.join(', ')].join(' · '));
+  }
+
+  #fullMessage() {
+    const t = this.#t;
+    const lang = this.#lang;
+    const { usage, limits } = this.#info;
+    const state = quotaState(this.#info);
+    return state?.reason === 'files'
+      ? t('quotaFull.files', { files: usage.files, maxFiles: limits.files })
+      : t('quotaFull.size', { size: formatSize(usage.size, lang), total: formatSize(limits.total_size, lang) });
   }
 
   /** The optimize controls above the grid: a choice (original / presets / custom), custom values and a hint. */
@@ -517,14 +563,29 @@ export class TansuExplorer extends HTMLElement {
     const t = this.#t;
     const lang = this.#lang;
     const { usage, limits } = info;
-    replace(this.#els.usage, limits.total_size !== null || limits.files !== null
-      ? t('usage', {
+    const state = quotaState(info);
+    if (!state) {
+      replace(this.#els.usage, t('usageNoLimit', { size: formatSize(usage.size, lang), files: usage.files }));
+      return;
+    }
+    const percent = Math.round(state.fraction * 100);
+    replace(this.#els.usage,
+      h('div', {
+        class: `meter ${state.level}`,
+        part: 'meter',
+        role: 'meter',
+        'aria-label': t('usageLabel'),
+        'aria-valuemin': 0,
+        'aria-valuemax': 100,
+        'aria-valuenow': percent,
+      }, h('span', { style: `width: ${percent}%` })),
+      h('span', {}, t('usage', {
         size: formatSize(usage.size, lang),
         total: limits.total_size === null ? '∞' : formatSize(limits.total_size, lang),
         files: usage.files,
         maxFiles: limits.files === null ? '∞' : limits.files,
-      })
-      : t('usageNoLimit', { size: formatSize(usage.size, lang), files: usage.files }));
+      })),
+      state.full && this.#canManage ? h('span', { class: 'quota-full' }, this.#fullMessage()) : null);
   }
 
   #renderStatus() {
@@ -624,7 +685,7 @@ export class TansuExplorer extends HTMLElement {
 
   /** Uploads files one after another into the current folder. */
   async #upload(files) {
-    if (!files.length || !this.#canManage) return;
+    if (!files.length || !this.#canManage || this.#full) return;
     const folder = this.#path;
     const queue = files.map((file) => ({ file, name: file.name, progress: 0, done: false, error: null, max: null, warning: null }));
     const fields = optimizeFields(this.#optimize);

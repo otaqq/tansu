@@ -6,7 +6,8 @@
  *
  *   php -S 0.0.0.0:8080 dev/server.php
  *
- * Owners: ?owner=<name> (default "demo"); the owner "readonly" may look but not change anything.
+ * Owners: ?owner=<name> (default "demo"); the owner "readonly" may look but not change anything, and "tiny"
+ * has room for one file.
  * Files are stored in dev/storage. POST /__reset empties it.
  */
 
@@ -74,7 +75,7 @@ if (!str_starts_with($uri, '/api/')) {
 $ownerId = is_string($_GET['owner'] ?? null) && preg_match('/^[a-z0-9-]{1,32}$/', $_GET['owner']) ? $_GET['owner'] : 'demo';
 $explorer = new Explorer(
     $storage,
-    new Owner($ownerId, "owners/$ownerId", canManage: $ownerId !== 'readonly'),
+    new Owner($ownerId, "owners/$ownerId", canManage: $ownerId !== 'readonly', limits: $ownerId === 'tiny' ? new Limits(2 * 1024 * 1024, null, 1) : null),
     fn (string $location, string $path) => '/api/raw?'.http_build_query(['path' => $path, 'owner' => $ownerId]),
     new Options(
         new FileTypes([...FileTypes::DEFAULT, FileTypes::SVG]),

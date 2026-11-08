@@ -72,7 +72,16 @@ export const explorerStyles = `
   .crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 0.15rem; flex: 1 1 12rem; min-width: 0; }
   .crumbs button { border: none; background: none; padding: 0.15em 0.35em; }
   .crumbs span { color: var(--_muted); }
-  .usage { color: var(--_muted); font-size: 0.85em; padding: 0 0.5rem 0.5rem; }
+  .usage { color: var(--_muted); font-size: 0.85em; padding: 0 0.5rem 0.5rem; display: flex; flex-wrap: wrap; gap: 0.25rem 0.75rem; align-items: center; }
+  .usage .meter {
+    width: 8rem; height: 0.5rem; border-radius: 0.25rem; overflow: hidden;
+    background: var(--_surface); border: 1px solid var(--_border);
+  }
+  .usage .meter span { display: block; height: 100%; background: var(--_accent); }
+  .usage .meter.near span { background: var(--_warning); }
+  .usage .meter.full span { background: var(--_danger); }
+  .usage .quota-full { color: var(--_danger); flex-basis: 100%; }
+  .limits { margin: 0; padding: 0.3rem 0.5rem; color: var(--_muted); font-size: 0.85em; border-bottom: 1px solid var(--_border); }
   .grid {
     flex: 1; overflow: auto; padding: 0.75rem; align-content: start;
     display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fill, minmax(var(--_tile), 1fr));
