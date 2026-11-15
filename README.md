@@ -24,7 +24,7 @@ Most file managers for web frameworks still ship jQuery, Bootstrap or a Vue bund
 | [lang/php/laravel](lang/php/laravel) | Laravel integration: routes, controllers, policies, config | Composer `otaqq/tansu` |
 | [protocol](protocol) | The HTTP API the UI speaks | — |
 | [conformance](conformance) | Language-independent tests for any back end that implements the protocol | — |
-| `lang/ruby`, `lang/go`, … | Other back ends | later |
+| `lang/node`, `lang/ruby`, `lang/go`, … | Other back ends (Node.js: npm `@otaqq/tansu-server`) | later |
 
 ```mermaid
 flowchart LR

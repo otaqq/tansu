@@ -155,7 +155,7 @@ The explorer shows the limits before people run into them. UI only: `GET /info` 
 ## Later
 
 - `conformance/`: HTTP-level test suite for any back end
-- Other back ends (`lang/ruby` for Rails, `lang/go`, …)
+- Other back ends (`lang/node` for Node.js as npm `@otaqq/tansu-server`, `lang/ruby` for Rails, `lang/go`, …)
 - npm release of `ui/`
 
 ## Developing tansu together with an app
