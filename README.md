@@ -131,6 +131,22 @@ The picker submits a path relative to the owner's root (`/photos/shop.jpg`). `Ot
 
 With `'url' => 'route'`, file URLs go through `GET /tansu/raw`, which applies the same OwnerResolver, so files can live on a private disk.
 
+### Several libraries
+
+One app can run more than one library from the package — say an image library and a separate area for documents or site files. List them under `areas`: each is a config that overrides the top-level one (merged at every depth), so an area writes only what differs, and keeps its own disk, accepted types, owner resolver, limits and routes. Give each area a distinct `routes.prefix` and `routes.name`.
+
+```php
+'areas' => [
+    'documents' => [
+        'disk' => 'documents',
+        'accept' => ['document'],
+        'routes' => ['prefix' => 'documents', 'name' => 'documents.'],
+    ],
+],
+```
+
+Point an element at an area's own endpoint: `<tansu-explorer endpoint="{{ url('documents') }}">`. In PHP, `app(Otaqq\Tansu\Laravel\TansuManager::class)->area('documents')` is that area's `Tansu`; `area()` with no name, and `Tansu` resolved directly, are the default area (the top-level config). Without `areas` there is only the default area and nothing changes.
+
 ## Development
 
 You need [mise](https://mise.jdx.dev/) (it installs Node) and Docker (PHP runs in a container built from [tests/php/Dockerfile](tests/php/Dockerfile): the lowest supported PHP with GD).

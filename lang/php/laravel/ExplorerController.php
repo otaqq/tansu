@@ -21,7 +21,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  */
 final class ExplorerController
 {
-    public function __construct(private readonly Tansu $tansu)
+    public function __construct(private readonly TansuManager $manager)
     {
     }
 
@@ -107,9 +107,29 @@ final class ExplorerController
 
     private function explorer(Request $request): Explorer
     {
+        $tansu = $this->tansu($request);
         $requested = $request->query('owner');
 
-        return $this->tansu->explorer($this->tansu->owner($request), is_string($requested) && $requested !== '' ? $requested : null);
+        return $tansu->explorer($tansu->owner($request), is_string($requested) && $requested !== '' ? $requested : null);
+    }
+
+    /**
+     * The Tansu of the area the matched route belongs to. Areas keep distinct route name prefixes (routes.php); the
+     * longest prefix the current route name starts with wins, so an area named within another ("tansu.docs.") is picked
+     * over the one it extends ("tansu.").
+     */
+    private function tansu(Request $request): Tansu
+    {
+        $name = (string) ($request->route()?->getName() ?? '');
+        $match = null;
+        foreach ($this->manager->routes() as $area => $routes) {
+            $prefix = (string) ($routes['name'] ?? '');
+            if ($prefix !== '' && str_starts_with($name, $prefix) && ($match === null || strlen($prefix) > strlen($match[1]))) {
+                $match = [$area, $prefix];
+            }
+        }
+
+        return $this->manager->area($match[0] ?? null);
     }
 
     /**

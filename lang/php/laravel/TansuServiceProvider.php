@@ -21,7 +21,9 @@ final class TansuServiceProvider extends ServiceProvider
             $config = $this->app['config'];
             $config->set('tansu', self::mergeConfig(require __DIR__.'/config/tansu.php', (array) $config->get('tansu', [])));
         }
-        $this->app->singleton(Tansu::class, fn ($app) => new Tansu($app, $app['filesystem'], $app['config']['tansu']));
+        $this->app->singleton(TansuManager::class, fn ($app) => new TansuManager($app, $app['filesystem'], $app['config']['tansu']));
+        // The default area, for apps that resolve Tansu directly (a single-library app, or host code that needs tansu's view of storage).
+        $this->app->singleton(Tansu::class, fn ($app) => $app->make(TansuManager::class)->area());
     }
 
     /**

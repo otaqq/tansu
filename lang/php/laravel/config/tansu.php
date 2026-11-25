@@ -32,6 +32,23 @@ return [
     ],
 
     /*
+     * More than one library from the same package: name => a config that overrides the keys above (merged at every
+     * depth, like the app config over these defaults), so an area writes only what differs — its own disk, accepted
+     * types, owner_resolver, limits and routes (give each area a distinct routes.prefix and routes.name). The keys
+     * above are the "default" area. Leave this empty for a single library. Resolve an area with
+     * app(Otaqq\Tansu\Laravel\TansuManager::class)->area('<name>'); Tansu resolved directly is the default area.
+     *
+     * 'areas' => [
+     *     'documents' => [
+     *         'disk' => 'documents',
+     *         'accept' => ['document'],
+     *         'routes' => ['prefix' => 'documents', 'name' => 'documents.'],
+     *     ],
+     * ],
+     */
+    'areas' => [],
+
+    /*
      * What uploads may be: groups ("image": JPEG, PNG, GIF, WebP; "document": PDF; "video": MP4, WebM)
      * and media types. SVG ('image/svg+xml') is in no group and off by default; when added, it is sanitized.
      */
