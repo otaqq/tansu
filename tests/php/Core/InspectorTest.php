@@ -78,4 +78,36 @@ final class InspectorTest extends TestCase
         $this->assertStringNotContainsString('GPS-SECRET', (new Inspector(new FileTypes()))->inspect($jpeg)->bytes);
         $this->assertSame($jpeg, (new Inspector(new FileTypes(), stripMetadata: false))->inspect($jpeg)->bytes);
     }
+
+    public function test_classifies_a_text_type_by_its_name_and_stores_it_unchanged(): void
+    {
+        $inspector = new Inspector($this->pageTypes());
+        $html = "<!doctype html><html><body>こんにちは</body></html>";
+
+        $inspection = $inspector->inspect($html, name: 'index.html');
+
+        $this->assertSame('text/html', $inspection->type);
+        $this->assertSame($html, $inspection->bytes);
+        $this->assertSame('text/html', $inspector->type($html, 'index.html'));
+    }
+
+    public function test_a_text_type_needs_its_name_to_be_told_apart(): void
+    {
+        $this->expectExceptionObject(TansuException::typeNotAllowed());
+        (new Inspector($this->pageTypes()))->inspect('body { color: red }');
+    }
+
+    public function test_bytes_that_are_not_text_are_refused_even_with_a_text_name(): void
+    {
+        $this->expectExceptionObject(TansuException::typeNotAllowed());
+        (new Inspector($this->pageTypes()))->inspect("x\0y binary", name: 'evil.html');
+    }
+
+    private function pageTypes(): FileTypes
+    {
+        return new FileTypes(['page'], [
+            'text/html' => ['extensions' => ['html', 'htm'], 'group' => 'page', 'preview' => 'link'],
+            'text/css' => ['extensions' => ['css'], 'group' => 'page', 'preview' => 'text'],
+        ]);
+    }
 }

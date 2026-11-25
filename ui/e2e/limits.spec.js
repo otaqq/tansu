@@ -8,7 +8,7 @@ test.beforeEach(async ({ request }) => {
 test('shows the largest file per group and the accepted types', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('#explorer').locator('.limits')).toHaveText(
-    'Images up to 2 MB · Documents up to 5 MB · Videos up to 20 MB · JPG, PNG, GIF, WEBP, PDF, MP4, WEBM, SVG',
+    'Images up to 2 MB · Documents up to 5 MB · Videos up to 20 MB · page up to 1 MB · JPG, PNG, GIF, WEBP, PDF, MP4, WEBM, SVG, HTML, CSS, JS',
   );
 });
 
@@ -44,7 +44,7 @@ test('refuses uploads with a reason when the quota is full', async ({ page }) =>
 test('speaks Japanese about limits too', async ({ page }) => {
   await page.goto('/?owner=tiny&lang=ja');
   const explorer = page.locator('#explorer');
-  await expect(explorer.locator('.limits')).toHaveText('1 ファイル 2 MB まで · JPG, PNG, GIF, WEBP, PDF, MP4, WEBM, SVG');
+  await expect(explorer.locator('.limits')).toHaveText('1 ファイル 2 MB まで · JPG, PNG, GIF, WEBP, PDF, MP4, WEBM, SVG, HTML, CSS, JS');
   await explorer.locator('input[type=file]').setInputFiles(png('only.png'));
   await expect(explorer.locator('.usage .quota-full')).toHaveText('上限に達しています（1 / 1 ファイル）。アップロードするには、ファイルを削除してください。');
 });

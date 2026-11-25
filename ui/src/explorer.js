@@ -65,6 +65,8 @@ export class TansuExplorer extends HTMLElement {
   #path = '/';
   #selected = null;
   #uploads = [];
+  /** Editing state of the selected text file: { path, text, loading, saving, dirty, saved, error }, or null */
+  #editor = null;
   /** State of the optimize controls (see optimize.js); undefined until the info is loaded */
   #optimize = undefined;
   #status = null;
@@ -350,7 +352,13 @@ export class TansuExplorer extends HTMLElement {
     const t = this.#t;
     const lang = this.#lang;
     const { sizes, types } = limitsSummary(this.#info);
-    const parts = sizes.map(({ group, max }) => t(group ? `limits.${group}` : 'limits.one', { max: formatSize(max, lang) }));
+    const parts = sizes.map(({ group, max }) => {
+      const size = formatSize(max, lang);
+      if (!group) return t('limits.one', { max: size });
+      const label = t(`limits.${group}`, { max: size });
+      // A custom group has no label of its own: name it generically rather than show the raw key
+      return label === `limits.${group}` ? t('limits.group', { group, max: size }) : label;
+    });
     replace(element, [...parts, types.join(', ')].join(' · '));
   }
 
@@ -507,24 +515,118 @@ export class TansuExplorer extends HTMLElement {
         h('div', { class: 'actions' }, h('button', { type: 'button', onclick: () => this.open(item.path) }, t('open')), manage));
       return;
     }
+    const mode = this.#previewMode(item.type);
+    if (mode === 'text') {
+      this.#renderTextDetails(item, manage);
+      return;
+    }
     const lang = this.#lang;
-    const group = fileGroup(item.type);
-    const preview = group === 'image'
+    const preview = mode === 'image'
       ? h('img', { src: item.url, alt: item.name })
-      : group === 'video'
+      : mode === 'video'
         ? h('video', { src: item.url, controls: true, preload: 'metadata', 'aria-label': item.name })
         : fileIcon(item.type);
     replace(this.#els.details,
       h('div', { class: 'preview', part: 'preview' }, preview),
       h('h3', {}, item.name),
-      h('dl', {},
-        h('dt', {}, t('size')), h('dd', {}, formatSize(item.size, lang)),
-        h('dt', {}, t('type')), h('dd', {}, item.type),
-        h('dt', {}, t('modified')), h('dd', {}, formatDate(item.modified, lang))),
+      this.#fileMeta(item),
       h('div', { class: 'actions' },
         this.hasAttribute('selectable') ? h('button', { type: 'button', class: 'primary', onclick: () => this.#choose(item) }, t('choose')) : null,
-        h('a', { href: item.url, target: '_blank', rel: 'noopener', class: 'button', part: 'link' }, group === 'document' ? t('openInNewTab') : t('open')),
+        mode === 'none' ? null : h('a', { href: item.url, target: '_blank', rel: 'noopener', class: 'button', part: 'link' }, mode === 'link' ? t('openInNewTab') : t('open')),
         manage));
+  }
+
+  /** The preview mode of a type, from the server's accept list, falling back to the media group. */
+  #previewMode(type) {
+    const found = this.#info?.accept?.find((entry) => entry.type === type);
+    if (found?.preview) return found.preview;
+    const group = fileGroup(type);
+    return group === 'image' ? 'image' : group === 'video' ? 'video' : 'link';
+  }
+
+  /** The size / type / modified list shown for a file. */
+  #fileMeta(item) {
+    const t = this.#t;
+    const lang = this.#lang;
+    return h('dl', {},
+      h('dt', {}, t('size')), h('dd', {}, formatSize(item.size, lang)),
+      h('dt', {}, t('type')), h('dd', {}, item.type),
+      h('dt', {}, t('modified')), h('dd', {}, formatDate(item.modified, lang)));
+  }
+
+  /** Details of a text file: an in-place editor when the file can be managed, otherwise a read-only view. */
+  #renderTextDetails(item, manage) {
+    const t = this.#t;
+    if (!this.#editor || this.#editor.path !== item.path) {
+      this.#editor = { path: item.path, text: '', loading: true, saving: false, dirty: false, saved: false, error: null };
+      this.#loadEditor(item);
+    }
+    const editor = this.#editor;
+    const canManage = this.#canManage;
+    const status = h('span', { class: 'editor-status', role: 'status' },
+      editor.error ? this.#message(editor.error) : editor.saving ? t('saving') : editor.saved && !editor.dirty ? t('saved') : '');
+    const save = canManage
+      ? h('button', { type: 'button', class: 'primary', disabled: !editor.dirty || editor.saving || editor.loading ? true : null, onclick: () => this.#saveEditor(item) }, t('save'))
+      : null;
+    const textarea = h('textarea', {
+      class: 'editor',
+      part: 'editor',
+      spellcheck: 'false',
+      wrap: 'off',
+      'aria-label': item.name,
+      readonly: canManage ? null : true,
+      disabled: editor.loading ? true : null,
+      oninput: (event) => {
+        editor.text = event.target.value;
+        editor.dirty = true;
+        editor.saved = false;
+        editor.error = null;
+        if (save) save.disabled = false;
+        status.textContent = '';
+      },
+    }, editor.loading ? '' : editor.text);
+    replace(this.#els.details,
+      h('div', { class: 'preview editor-preview', part: 'preview' }, editor.loading ? h('p', { class: 'hint' }, t('loading')) : textarea),
+      h('h3', {}, item.name),
+      this.#fileMeta(item),
+      h('div', { class: 'actions' },
+        save,
+        status,
+        h('a', { href: item.url, target: '_blank', rel: 'noopener', class: 'button', part: 'link' }, t('openInNewTab')),
+        manage));
+  }
+
+  async #loadEditor(item) {
+    try {
+      const text = await this.#client.text(item.url);
+      if (this.#editor?.path !== item.path) return;
+      this.#editor.text = text;
+      this.#editor.loading = false;
+    } catch (error) {
+      if (this.#editor?.path !== item.path) return;
+      this.#editor.loading = false;
+      this.#editor.error = error;
+    }
+    if (this.#selected?.path === item.path) this.#renderDetails();
+  }
+
+  async #saveEditor(item) {
+    if (!this.#editor || this.#editor.saving || this.#editor.loading) return;
+    this.#editor.saving = true;
+    this.#editor.error = null;
+    this.#renderDetails();
+    const saved = await this.#run(() => this.#client.updateFile(item.path, this.#editor.text));
+    if (!this.#editor || this.#editor.path !== item.path) return;
+    this.#editor.saving = false;
+    if (!saved) {
+      this.#renderDetails();
+      return;
+    }
+    this.#editor.dirty = false;
+    this.#editor.saved = true;
+    this.#changed('file-edited', item.path, saved);
+    this.#selected = saved;
+    await Promise.all([this.#loadInfo(), this.#loadFolder()]);
   }
 
   #renderUploads() {

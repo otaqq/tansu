@@ -11,6 +11,10 @@ export const svg = (name) => ({
 
 export const text = (name) => ({ name, mimeType: 'text/plain', buffer: Buffer.from('not an image') });
 
+export const css = (name, body = 'body { color: red }') => ({ name, mimeType: 'text/css', buffer: Buffer.from(body) });
+
+export const html = (name, body = '<!doctype html><title>Home</title>') => ({ name, mimeType: 'text/html', buffer: Buffer.from(body) });
+
 // A solid PNG of any size, built with zlib (no image library needed)
 import { deflateSync } from 'node:zlib';
 

@@ -211,15 +211,16 @@ final class Explorer
             throw TansuException::fileTooLarge();
         }
         $bytes = $contents();
+        $filename = is_string($name) && $name !== '' ? $name : null;
         // The limit of the type's group, before any work
-        if ($size > $this->limits->fileSizeFor($this->inspector->type($bytes))) {
+        if ($size > $this->limits->fileSizeFor($this->options->types->groupOf($this->inspector->type($bytes, $filename)))) {
             throw TansuException::fileTooLarge();
         }
-        $inspection = $this->inspector->inspect($bytes, $optimization);
+        $inspection = $this->inspector->inspect($bytes, $optimization, $filename);
         unset($bytes);
         $this->assertRoom(strlen($inspection->bytes));
 
-        $wanted = Name::file(is_string($name) && $name !== '' ? $name : 'file', FileTypes::extension($inspection->type));
+        $wanted = Name::file($filename ?? 'file', $this->options->types->extension($inspection->type));
         $path = $this->freeName($folder, $wanted);
         $this->storage->write($this->owner->location($path), $inspection->bytes);
 
@@ -239,6 +240,39 @@ final class Explorer
             'optimized' => $inspection->optimization?->optimized ?? false,
             'optimization_skipped' => $skipped,
         ];
+    }
+
+    /**
+     * Replaces the contents of an existing editable file in place. The type is kept: it is read from the file's
+     * extension and must be an accepted, non-media type (a text type such as HTML, CSS or JS), and the new bytes
+     * must be text of that type. Media files are replaced by uploading a new file, not through this.
+     *
+     * @param int               $size     the new contents' size in bytes, checked before $contents is read
+     * @param Closure(): string $contents reads the new contents
+     * @return array<string, mixed> the stored file
+     */
+    public function replace(string $path, int $size, Closure $contents): array
+    {
+        $this->assertManage();
+        $this->assertFile($path);
+        $this->assertNotInUse([$path]);
+        $type = $this->options->types->typeOf(Path::name($path));
+        if ($type === null || FileTypes::isSignatureType($type) || !$this->options->types->accepts($type)) {
+            throw TansuException::typeNotAllowed();
+        }
+        if ($size > $this->limits->fileSizeFor($this->options->types->groupOf($type))) {
+            throw TansuException::fileTooLarge();
+        }
+        $location = $this->owner->location($path);
+        $current = $this->storage->fileSize($location);
+        $inspection = $this->inspector->inspect($contents(), name: Path::name($path));
+        if ($inspection->type !== $type) {
+            throw TansuException::typeNotAllowed();
+        }
+        $this->assertRoom(strlen($inspection->bytes), newFile: false, replacing: $current);
+        $this->storage->write($location, $inspection->bytes);
+
+        return $this->fileData($this->attributes($path));
     }
 
     /**
@@ -286,7 +320,7 @@ final class Explorer
 
         return [
             'stream' => $this->storage->readStream($location),
-            'type' => FileTypes::typeOf(Path::name($path)) ?? 'application/octet-stream',
+            'type' => $this->options->types->typeOf(Path::name($path)) ?? 'application/octet-stream',
             'size' => $this->storage->fileSize($location),
             'name' => Path::name($path),
         ];
@@ -389,7 +423,7 @@ final class Explorer
             'name' => Path::name($path),
             'path' => $path,
             'size' => $entry->fileSize() ?? $this->storage->fileSize($entry->path()),
-            'type' => FileTypes::typeOf(Path::name($path)) ?? 'application/octet-stream',
+            'type' => $this->options->types->typeOf(Path::name($path)) ?? 'application/octet-stream',
             'modified' => (new DateTimeImmutable('@'.$modified))->setTimezone(new \DateTimeZone(date_default_timezone_get()))->format(DATE_ATOM),
             'url' => ($this->url)($entry->path(), $path),
         ];
@@ -437,14 +471,18 @@ final class Explorer
         }
     }
 
-    private function assertRoom(int $size): void
+    /**
+     * @param bool $newFile   false when the stored bytes replace an existing file, so the file count does not grow
+     * @param int  $replacing the size the replaced file takes now, not to be counted twice against the quota
+     */
+    private function assertRoom(int $size, bool $newFile = true, int $replacing = 0): void
     {
         if ($this->limits->totalSize === null && $this->limits->files === null) {
             return;
         }
         $usage = $this->usage();
-        if (($this->limits->totalSize !== null && $usage['size'] + $size > $this->limits->totalSize)
-            || ($this->limits->files !== null && $usage['files'] + 1 > $this->limits->files)) {
+        if (($this->limits->totalSize !== null && $usage['size'] - $replacing + $size > $this->limits->totalSize)
+            || ($this->limits->files !== null && $usage['files'] + ($newFile ? 1 : 0) > $this->limits->files)) {
             throw TansuException::quotaExceeded();
         }
     }

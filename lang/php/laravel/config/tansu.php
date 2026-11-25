@@ -55,6 +55,25 @@ return [
     'accept' => FileTypes::DEFAULT_GROUPS,
 
     /*
+     * Extra file types this installation accepts, beyond the built-in media. Each media type maps to its extensions
+     * (the first is the one files are stored with), the group it joins (a new name is allowed; per-group limits and
+     * the accept list use it) and how the explorer previews it: "image" or "video" (inline), "link" (open in a new
+     * tab), "text" (edit in place) or "none". Add a type's name or its group to "accept" above to allow it.
+     *
+     * Text types have no byte signature, so an upload is classified by its extension once its bytes are confirmed to
+     * be text. Served files keep the hardened, sandboxed headers of GET /raw, so stored HTML never runs as a page;
+     * to preview a page as it looks live, point "url" at where the host publishes it.
+     *
+     * Example — the raw HTML, CSS and JavaScript of a static site:
+     * 'types' => [
+     *     'text/html'              => ['extensions' => ['html', 'htm'], 'group' => 'page', 'preview' => 'link'],
+     *     'text/css'               => ['extensions' => ['css'],         'group' => 'page', 'preview' => 'text'],
+     *     'application/javascript' => ['extensions' => ['js'],          'group' => 'page', 'preview' => 'text'],
+     * ],
+     */
+    'types' => [],
+
+    /*
      * Removes EXIF, XMP and similar metadata from images. PDF and video metadata is not removed.
      */
     'strip_metadata' => true,

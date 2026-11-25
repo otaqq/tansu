@@ -48,6 +48,38 @@ describe('TansuClient', () => {
     assert.equal(calls[0].init.method, 'DELETE');
   });
 
+  it('replaces a text file with PUT /files', async () => {
+    const { fetch, calls } = fakeFetch(200, { path: '/index.html', type: 'text/html' });
+    const client = new TansuClient({ endpoint: '/t', csrfToken: 'tok', fetch });
+
+    assert.deepEqual(await client.updateFile('/index.html', '<p>hi</p>'), { path: '/index.html', type: 'text/html' });
+    assert.equal(calls[0].url, '/t/files');
+    assert.equal(calls[0].init.method, 'PUT');
+    assert.equal(calls[0].init.headers['X-CSRF-TOKEN'], 'tok');
+    assert.deepEqual(JSON.parse(calls[0].init.body), { path: '/index.html', contents: '<p>hi</p>' });
+  });
+
+  it('reads a stored file as text from its url', async () => {
+    const calls = [];
+    const fetch = async (url, init) => {
+      calls.push({ url, init });
+      return { status: 200, text: async () => 'body { color: red }' };
+    };
+    const client = new TansuClient({ endpoint: '/t', owner: 'c1', fetch });
+
+    assert.equal(await client.text('/storage/tansu/c1/style.css'), 'body { color: red }');
+    assert.equal(calls[0].url, '/storage/tansu/c1/style.css');
+    assert.equal(calls[0].init.credentials, 'same-origin');
+  });
+
+  it('turns a failed text read into a TansuError', async () => {
+    const fetch = async () => ({ status: 404, text: async () => '' });
+    const error = await new TansuClient({ endpoint: '/t', fetch }).text('/x').catch((e) => e);
+
+    assert.ok(error instanceof TansuError);
+    assert.equal(error.status, 404);
+  });
+
   it('turns protocol errors into TansuError', async () => {
     const { fetch } = fakeFetch(409, { error: { code: 'in_use', message: 'The file is in use.', path: '/a.jpg' } });
     const error = await new TansuClient({ endpoint: '/t', fetch }).deleteFile('/a.jpg').catch((e) => e);

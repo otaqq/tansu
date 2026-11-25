@@ -15,7 +15,7 @@ final class LimitsTest extends TestCase
         $limits = new Limits(100);
 
         $this->assertSame(100, $limits->fileSize);
-        $this->assertSame(100, $limits->fileSizeFor('video/mp4'));
+        $this->assertSame(100, $limits->fileSizeFor('video'));
         $this->assertSame(['file_size' => 100, 'file_sizes' => null, 'total_size' => null, 'files' => null], $limits->toArray());
     }
 
@@ -24,11 +24,10 @@ final class LimitsTest extends TestCase
         $limits = new Limits(['image' => 100, 'video' => 500], 1000, 3);
 
         $this->assertSame(500, $limits->fileSize);
-        $this->assertSame(100, $limits->fileSizeFor('image/png'));
-        $this->assertSame(100, $limits->fileSizeFor('image/svg+xml'));
-        $this->assertSame(500, $limits->fileSizeFor('video/webm'));
+        $this->assertSame(100, $limits->fileSizeFor('image'));
+        $this->assertSame(500, $limits->fileSizeFor('video'));
         // A group without its own limit gets the largest one
-        $this->assertSame(500, $limits->fileSizeFor('application/pdf'));
+        $this->assertSame(500, $limits->fileSizeFor('document'));
         $this->assertSame(
             ['file_size' => 500, 'file_sizes' => ['image' => 100, 'video' => 500], 'total_size' => 1000, 'files' => 3],
             $limits->toArray(),
@@ -39,5 +38,12 @@ final class LimitsTest extends TestCase
     {
         $this->expectException(InvalidArgumentException::class);
         new Limits(['audio' => 100]);
+    }
+
+    public function test_a_custom_group_is_accepted_when_its_name_is_given(): void
+    {
+        $limits = new Limits(['page' => 100], groups: ['image', 'document', 'video', 'page']);
+
+        $this->assertSame(100, $limits->fileSizeFor('page'));
     }
 }

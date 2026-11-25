@@ -62,7 +62,7 @@ final class ApiTest extends TestCase
 
         $this->getJson('/tansu/info')->assertOk()->assertExactJson([
             'protocol' => 1,
-            'accept' => [['type' => 'image/png', 'extensions' => ['png'], 'group' => 'image']],
+            'accept' => [['type' => 'image/png', 'extensions' => ['png'], 'group' => 'image', 'preview' => 'image']],
             'limits' => ['file_size' => 1000, 'file_sizes' => null, 'total_size' => null, 'files' => 5],
             'optimize' => ['enabled' => false],
             'usage' => ['size' => 0, 'files' => 0],
@@ -175,6 +175,38 @@ final class ApiTest extends TestCase
             ->assertStatus(400)->assertJsonPath('error.code', 'upload_failed');
         $this->postJson('/tansu/folders', ['path' => '/', 'name' => '...'])
             ->assertStatus(422)->assertJsonPath('error.code', 'invalid_name');
+    }
+
+    public function test_editing_a_text_file_replaces_its_contents(): void
+    {
+        config([
+            'tansu.accept' => ['page'],
+            'tansu.types' => [
+                'text/html' => ['extensions' => ['html', 'htm'], 'group' => 'page', 'preview' => 'link'],
+                'text/css' => ['extensions' => ['css'], 'group' => 'page', 'preview' => 'text'],
+            ],
+        ]);
+        $this->login();
+
+        $stored = $this->post('/tansu/files', ['path' => '/', 'file' => UploadedFile::fake()->createWithContent('index.html', '<p>old</p>')], ['Accept' => 'application/json'])
+            ->assertCreated()->assertJsonPath('type', 'text/html')->json();
+
+        $this->putJson('/tansu/files', ['path' => $stored['path'], 'contents' => '<p>new</p>'])
+            ->assertOk()->assertJsonPath('path', $stored['path'])->assertJsonPath('type', 'text/html');
+
+        $raw = $this->get('/tansu/raw?path='.$stored['path'])->assertOk();
+        $this->assertStringStartsWith('text/html', (string) $raw->headers->get('Content-Type'));
+        $this->assertSame('<p>new</p>', $raw->streamedContent());
+    }
+
+    public function test_editing_refuses_a_media_file(): void
+    {
+        $this->login();
+        $stored = $this->post('/tansu/files', ['path' => '/', 'file' => $this->jpeg()], ['Accept' => 'application/json'])
+            ->assertCreated()->json();
+
+        $this->putJson('/tansu/files', ['path' => $stored['path'], 'contents' => 'nope'])
+            ->assertStatus(415)->assertJsonPath('error.code', 'type_not_allowed');
     }
 
     public function test_file_too_large_by_configured_limit(): void

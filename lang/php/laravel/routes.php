@@ -19,6 +19,7 @@ $endpoints = function (): void {
     Route::patch('folders', 'renameFolder')->name('folders.rename');
     Route::delete('folders', 'deleteFolder')->name('folders.delete');
     Route::post('files', 'upload')->name('files.upload');
+    Route::put('files', 'updateFile')->name('files.update');
     Route::patch('files', 'renameFile')->name('files.rename');
     Route::delete('files', 'deleteFile')->name('files.delete');
     Route::get('raw', 'raw')->name('raw');

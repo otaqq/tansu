@@ -42,11 +42,13 @@ final class Inspector
     }
 
     /**
+     * @param ?string $name the upload's name, used to tell text types (HTML, CSS, JS) apart, which have no signature
+     *
      * @throws TansuException type_not_allowed
      */
-    public function inspect(string $bytes, ?Optimization $optimization = null): Inspection
+    public function inspect(string $bytes, ?Optimization $optimization = null, ?string $name = null): Inspection
     {
-        $type = $this->detect($bytes);
+        $type = $this->detect($bytes, $name);
         if ($type === null || !$this->types->accepts($type)) {
             throw TansuException::typeNotAllowed();
         }
@@ -67,11 +69,13 @@ final class Inspector
     /**
      * Only the type, without cleaning: for checks that must come before the work (the size limit of the type's group).
      *
+     * @param ?string $name see inspect()
+     *
      * @throws TansuException type_not_allowed
      */
-    public function type(string $bytes): string
+    public function type(string $bytes, ?string $name = null): string
     {
-        $type = $this->detect($bytes);
+        $type = $this->detect($bytes, $name);
         if ($type === null || !$this->types->accepts($type)) {
             throw TansuException::typeNotAllowed();
         }
@@ -79,7 +83,7 @@ final class Inspector
         return $type;
     }
 
-    private function detect(string $bytes): ?string
+    private function detect(string $bytes, ?string $name = null): ?string
     {
         $info = @getimagesizefromstring($bytes);
         if ($info !== false && isset(self::RASTER[$info[2]]) && $info[0] > 0 && $info[1] > 0) {
@@ -98,7 +102,24 @@ final class Inspector
             return 'video/webm';
         }
 
+        // Text types (HTML, CSS, JS, ...) have no byte signature: trust the name's extension, but only for bytes
+        // that are really text, so a binary can never be stored as one.
+        if ($name !== null) {
+            $type = $this->types->typeOf($name);
+            if ($type !== null && !FileTypes::isSignatureType($type) && $this->types->accepts($type) && self::isText($bytes)) {
+                return $type;
+            }
+        }
+
         return null;
+    }
+
+    /**
+     * Bytes that hold no NUL and decode as UTF-8 (an empty file counts as text).
+     */
+    private static function isText(string $bytes): bool
+    {
+        return !str_contains($bytes, "\0") && mb_check_encoding($bytes, 'UTF-8');
     }
 
     /**

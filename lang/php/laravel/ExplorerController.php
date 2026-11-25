@@ -79,6 +79,15 @@ final class ExplorerController
         return $this->run($request, fn (Explorer $e) => $e->renameFile(Path::parse($request->json('path')), $request->json('name')));
     }
 
+    public function updateFile(Request $request): JsonResponse
+    {
+        return $this->run($request, function (Explorer $e) use ($request) {
+            $contents = (string) $request->input('contents', '');
+
+            return $e->replace(Path::parse($request->input('path')), strlen($contents), fn () => $contents);
+        });
+    }
+
     public function deleteFile(Request $request): JsonResponse|Response
     {
         return $this->run($request, fn (Explorer $e) => $e->deleteFile(Path::parse($request->query('path'))), 204);

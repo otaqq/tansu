@@ -63,7 +63,7 @@ final class AreasTest extends TestCase
             array_column($this->getJson('/tansu/info')->assertOk()->json('accept'), 'group'),
         );
         $this->assertSame(
-            [['type' => 'image/png', 'extensions' => ['png'], 'group' => 'image']],
+            [['type' => 'image/png', 'extensions' => ['png'], 'group' => 'image', 'preview' => 'image']],
             $this->getJson('/docs-files/info')->assertOk()->json('accept'),
         );
     }

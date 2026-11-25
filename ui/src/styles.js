@@ -139,6 +139,9 @@ export const explorerStyles = `
   .tree button[aria-current="true"] { background: var(--_selected); font-weight: 600; }
   .preview { aspect-ratio: 1; display: grid; place-items: center; background: var(--_background); border-radius: var(--_radius); overflow: hidden; }
   .preview img, .preview video { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .editor-preview { aspect-ratio: auto; background: none; border-radius: 0; overflow: visible; }
+  .editor { width: 100%; min-height: 12rem; resize: vertical; box-sizing: border-box; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.8em; line-height: 1.4; white-space: pre; border: 1px solid var(--_border); border-radius: var(--_radius); padding: 0.5rem; background: var(--_surface); color: inherit; }
+  .editor-status { align-self: center; color: var(--_muted); font-size: 0.85em; }
   .details h3 { margin: 0; font-size: 1em; overflow-wrap: anywhere; }
   .details dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 0.25rem 0.75rem; font-size: 0.85em; }
   .details dt { color: var(--_muted); }

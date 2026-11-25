@@ -87,7 +87,8 @@ return [
 
 | Key | Default | Meaning |
 |---|---|---|
-| `accept` | `['image', 'document', 'video']` | Groups and media types. `image`: JPEG, PNG, GIF, WebP; `document`: PDF; `video`: MP4, WebM. SVG (`'image/svg+xml'`) is in no group: name it to accept it (it is sanitized) |
+| `accept` | `['image', 'document', 'video']` | Groups and media types. `image`: JPEG, PNG, GIF, WebP; `document`: PDF; `video`: MP4, WebM. SVG (`'image/svg+xml'`) is in no group: name it to accept it (it is sanitized). A custom group or type from `types` may be listed here too |
+| `types` | `[]` | Extra types beyond the built-in media (see [Custom types and the text editor](#custom-types-and-the-text-editor)). Each media type maps to its `extensions`, the `group` it joins (a new name is allowed) and its `preview` mode |
 | `strip_metadata` | `true` | Remove EXIF, XMP and similar metadata from images. **PDF and video metadata is not removed** (author, device, and in phone videos the GPS position); tell users when that matters |
 | `limits.file_size` | image 5 MB, document 10 MB, video 50 MB | One number for every type, or a size per group. A map is merged over the defaults, so a group left out keeps its default size (write one number to use the same size for all). Checked on the uploaded file, before optimization. PHP's `upload_max_filesize` and `post_max_size` must be at least the largest |
 | `limits.total_size`, `limits.files` | `null` | Quota per owner; `null` for no limit |
@@ -146,6 +147,29 @@ One app can run more than one library from the package — say an image library 
 ```
 
 Point an element at an area's own endpoint: `<tansu-explorer endpoint="{{ url('documents') }}">`. In PHP, `app(Otaqq\Tansu\Laravel\TansuManager::class)->area('documents')` is that area's `Tansu`; `area()` with no name, and `Tansu` resolved directly, are the default area (the top-level config). Without `areas` there is only the default area and nothing changes.
+
+### Custom types and the text editor
+
+The built-in types are media (images, PDF, video). `types` registers more — for example the raw HTML, CSS and JavaScript of a static site, so designers upload and edit the pages from the explorer. Each media type maps to its `extensions` (the first is the one files are stored with), the `group` it joins (a new name such as `page` is allowed; per-group limits and `accept` use it) and its `preview`:
+
+| `preview` | The explorer shows |
+|---|---|
+| `image`, `video` | The file inline (the default for media groups) |
+| `link` | An **Open in a new tab** link (the default for a custom type, and for PDF) |
+| `text` | An **in-place editor**: the file's text, a Save button and a status line. Saving sends `PUT /files` |
+| `none` | Only the icon |
+
+```php
+'accept' => ['image', 'page'],
+'types' => [
+    'text/html'              => ['extensions' => ['html', 'htm'], 'group' => 'page', 'preview' => 'link'],
+    'text/css'               => ['extensions' => ['css'],         'group' => 'page', 'preview' => 'text'],
+    'application/javascript' => ['extensions' => ['js'],          'group' => 'page', 'preview' => 'text'],
+],
+'limits' => ['file_size' => ['page' => 1 * 1024 * 1024]],
+```
+
+Media is recognized by its content, but text (HTML, CSS, JS) has no byte signature, so an upload of a custom type is classified by its name's extension once its bytes are confirmed to be text (no NUL byte, valid UTF-8): a binary can never be stored as one. Stored files keep the hardened, sandboxed headers of `GET /raw`, so HTML never runs as a page; to let `link` open a page as it looks live, set that area's `url` to where the host publishes it.
 
 ## Development
 
