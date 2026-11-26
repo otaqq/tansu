@@ -18,32 +18,16 @@
  */
 import { TansuClient, TansuError } from './api.js';
 import { adoptStyles, h, replace } from './dom.js';
+import { ICONS, icon, iconButton, iconLink } from './icons.js';
 import { formatDate, formatSize, languageOf, translator } from './i18n.js';
 import { fileGroup, fileSizeLimit, initialOptimize, labelOf, optimizeFields } from './optimize.js';
 import { limitsSummary, quotaState } from './quota.js';
 import { explorerStyles } from './styles.js';
 
-const SVG_NS = 'http://www.w3.org/2000/svg';
-const FOLDER_ICON = 'M2 5.5A1.5 1.5 0 0 1 3.5 4h4.38a1.5 1.5 0 0 1 1.06.44L10.5 6h10A1.5 1.5 0 0 1 22 7.5v11a1.5 1.5 0 0 1-1.5 1.5h-17A1.5 1.5 0 0 1 2 18.5z';
-const FILE_ICON = 'M6 2h8l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm7 1.5V8h4.5z';
-const DOCUMENT_ICON = 'M6 2h8l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm7 1.5V8h4.5zM8 11.5h8V13H8zm0 3.5h8v1.5H8z';
-const VIDEO_ICON = 'M3 5h18a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zm7 4v6l5-3z';
-
-function icon(pathData) {
-  const svg = document.createElementNS(SVG_NS, 'svg');
-  svg.setAttribute('viewBox', '0 0 24 24');
-  svg.setAttribute('aria-hidden', 'true');
-  const path = document.createElementNS(SVG_NS, 'path');
-  path.setAttribute('d', pathData);
-  path.setAttribute('fill-rule', 'evenodd');
-  svg.append(path);
-  return svg;
-}
-
 /** The icon of a file that has no thumbnail, by its group. */
 function fileIcon(type) {
   const group = fileGroup(type);
-  return icon(group === 'video' ? VIDEO_ICON : type === 'application/pdf' ? DOCUMENT_ICON : FILE_ICON);
+  return icon(group === 'video' ? ICONS.video : type === 'application/pdf' ? ICONS.document : ICONS.file);
 }
 
 function parentOf(path) {
@@ -329,14 +313,13 @@ export class TansuExplorer extends HTMLElement {
     }
     const full = this.#full;
     replace(this.#els.buttons, this.#canManage ? [
-      h('button', { type: 'button', onclick: () => this.#createFolder() }, t('newFolder')),
-      h('button', {
-        type: 'button',
+      iconButton('folderPlus', t('newFolder'), { onclick: () => this.#createFolder() }),
+      iconButton('upload', t('upload'), {
         class: 'primary',
         disabled: full,
-        title: full ? this.#fullMessage() : null,
+        title: full ? this.#fullMessage() : t('upload'),
         onclick: () => this.#els.input.click(),
-      }, t('upload')),
+      }),
     ] : null);
     this.#renderLimits();
   }
@@ -467,7 +450,7 @@ export class TansuExplorer extends HTMLElement {
     replace(this.#els.grid, items.map((item) => {
       const isFolder = !('size' in item);
       const thumb = isFolder
-        ? icon(FOLDER_ICON)
+        ? icon(ICONS.folder)
         : item.type.startsWith('image/')
           ? h('img', { src: item.url, alt: '', loading: 'lazy', decoding: 'async' })
           : fileIcon(item.type);
@@ -505,14 +488,14 @@ export class TansuExplorer extends HTMLElement {
     }
     const isFolder = !('size' in item);
     const manage = this.#canManage ? [
-      h('button', { type: 'button', onclick: () => this.#rename(item) }, t('rename')),
-      h('button', { type: 'button', class: 'danger', onclick: () => this.#delete(item) }, t('delete')),
+      iconButton('pencil', t('rename'), { onclick: () => this.#rename(item) }),
+      iconButton('trash', t('delete'), { class: 'danger', onclick: () => this.#delete(item) }),
     ] : [];
     if (isFolder) {
       replace(this.#els.details,
-        h('div', { class: 'preview' }, icon(FOLDER_ICON)),
+        h('div', { class: 'preview' }, icon(ICONS.folder)),
         h('h3', {}, item.name),
-        h('div', { class: 'actions' }, h('button', { type: 'button', onclick: () => this.open(item.path) }, t('open')), manage));
+        h('div', { class: 'actions' }, iconButton('open', t('open'), { onclick: () => this.open(item.path) }), manage));
       return;
     }
     const mode = this.#previewMode(item.type);
@@ -531,9 +514,9 @@ export class TansuExplorer extends HTMLElement {
       h('h3', {}, item.name),
       this.#fileMeta(item),
       h('div', { class: 'actions' },
-        this.hasAttribute('selectable') ? h('button', { type: 'button', class: 'primary', onclick: () => this.#choose(item) }, t('choose')) : null,
-        mode === 'none' ? null : h('a', { href: item.url, target: '_blank', rel: 'noopener', class: 'button', part: 'link' }, mode === 'link' ? t('openInNewTab') : t('open')),
-        h('a', { href: item.url, download: item.name, class: 'button', part: 'download' }, t('download')),
+        this.hasAttribute('selectable') ? iconButton('check', t('choose'), { class: 'primary', onclick: () => this.#choose(item) }) : null,
+        mode === 'none' ? null : iconLink('open', mode === 'link' ? t('openInNewTab') : t('open'), { href: item.url, target: '_blank', rel: 'noopener', part: 'link' }),
+        iconLink('download', t('download'), { href: item.url, download: item.name, part: 'download' }),
         manage));
   }
 
@@ -567,7 +550,7 @@ export class TansuExplorer extends HTMLElement {
     const status = h('span', { class: 'editor-status', role: 'status' },
       editor.error ? this.#message(editor.error) : editor.saving ? t('saving') : editor.saved && !editor.dirty ? t('saved') : '');
     const save = canManage
-      ? h('button', { type: 'button', class: 'primary', disabled: !editor.dirty || editor.saving || editor.loading ? true : null, onclick: () => this.#saveEditor(item) }, t('save'))
+      ? iconButton('check', t('save'), { class: 'primary', disabled: !editor.dirty || editor.saving || editor.loading ? true : null, onclick: () => this.#saveEditor(item) })
       : null;
     const textarea = h('textarea', {
       class: 'editor',
@@ -593,7 +576,7 @@ export class TansuExplorer extends HTMLElement {
       h('div', { class: 'actions' },
         save,
         status,
-        h('a', { href: item.url, target: '_blank', rel: 'noopener', class: 'button', part: 'link' }, t('openInNewTab')),
+        iconLink('open', t('openInNewTab'), { href: item.url, target: '_blank', rel: 'noopener', part: 'link' }),
         manage));
   }
 

@@ -15,6 +15,7 @@
  */
 import { TansuClient, TansuError } from './api.js';
 import { adoptStyles, h, replace } from './dom.js';
+import { iconButton } from './icons.js';
 import { languageOf, translator } from './i18n.js';
 import { documentsStyles } from './styles.js';
 
@@ -150,22 +151,22 @@ export class TansuDocuments extends HTMLElement {
       },
     }, this.#loading ? '' : this.#content);
     this.#els.editor = editor;
-    this.#els.save = h('button', {
-      type: 'button', class: 'primary',
+    this.#els.save = iconButton('check', t('save'), {
+      class: 'primary',
       disabled: !this.#dirty || this.#saving || this.#loading ? true : null,
       onclick: () => this.#save(),
-    }, t('save'));
+    });
     this.#els.status = h('span', { class: 'status', role: 'status' },
       this.#error ? this.#message(this.#error) : this.#saving ? t('saving') : this.#saved && !this.#dirty ? t('saved') : '');
     const preview = this.#previewProvider
-      ? h('button', { type: 'button', disabled: this.#loading ? true : null, onclick: () => this.#renderPreview() }, t('documents.preview'))
+      ? iconButton('eye', t('documents.preview'), { disabled: this.#loading ? true : null, onclick: () => this.#renderPreview() })
       : null;
     const fileInput = h('input', {
       type: 'file', accept: this.#accept(), hidden: true,
       onchange: (event) => this.#loadFile(event.target.files?.[0]),
     });
-    const upload = h('button', { type: 'button', disabled: this.#loading ? true : null, onclick: () => fileInput.click() }, t('upload'));
-    const download = h('button', { type: 'button', disabled: this.#loading ? true : null, onclick: () => this.#download() }, t('download'));
+    const upload = iconButton('upload', t('upload'), { disabled: this.#loading ? true : null, onclick: () => fileInput.click() });
+    const download = iconButton('download', t('download'), { disabled: this.#loading ? true : null, onclick: () => this.#download() });
     return h('div', { class: 'editor-pane' }, editor,
       h('div', { class: 'bar' }, this.#els.save, preview, upload, download, this.#els.status), fileInput);
   }

@@ -28,6 +28,8 @@ const controls = `
   }
   button:hover:not(:disabled), a.button:hover { background: var(--_surface); }
   button:disabled { opacity: 0.5; cursor: default; }
+  button svg, a.button svg { width: 1.2em; height: 1.2em; fill: currentColor; display: block; }
+  .icon-button { padding: 0.4em; line-height: 0; }
   button.primary { background: var(--_accent); border-color: var(--_accent); color: var(--_accent-contrast); }
   button.primary:hover:not(:disabled) { background: color-mix(in srgb, var(--_accent) 85%, #000); }
   button.danger { color: var(--_danger); }
