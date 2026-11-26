@@ -151,7 +151,7 @@ A preset key the back end does not know, `custom` with no size and no quality, v
 
 ### `PUT /files`
 
-Replaces the contents of an existing editable file in place, for a UI that edits text (HTML, CSS, JS) rather than re-uploading it. The body is `{ "path", "contents" }`, `contents` the new text. The file's type is kept: it is read from the file's extension and must be an accepted, non-media type (so a text type, never an image or video — those are replaced with `POST /files`), and the new `contents` must be text of that type, or the request fails with `type_not_allowed`. The checks are the manage right (`forbidden`), the file exists (`not_found`), it is in use (`in_use`), the type, the size against the type's group limit (`file_too_large`) and the quota (`quota_exceeded`). The response is the stored file.
+Writes a text file's contents at an exact path, **creating it when it does not exist yet and replacing it when it does** (upsert), for a UI that edits text (HTML, CSS, JS) or saves a named document to a fixed path rather than uploading. The body is `{ "path", "contents" }`, `contents` the new text. The type is read from the path's extension and must be an accepted, non-media type (so a text type, never an image or video — those are added with `POST /files`), and `contents` must be text of that type, or the request fails with `type_not_allowed`. The checks are the manage right (`forbidden`), the type, the size against the type's group limit (`file_too_large`), and — when replacing — that it is in use (`in_use`), plus the quota (`quota_exceeded`). The response is the stored file.
 
 ### `PATCH /files`, `PATCH /folders`
 

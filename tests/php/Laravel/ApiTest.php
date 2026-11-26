@@ -199,6 +199,21 @@ final class ApiTest extends TestCase
         $this->assertSame('<p>new</p>', $raw->streamedContent());
     }
 
+    public function test_putting_a_new_text_file_creates_it(): void
+    {
+        config([
+            'tansu.accept' => ['page'],
+            'tansu.types' => ['text/html' => ['extensions' => ['html', 'htm'], 'group' => 'page', 'preview' => 'text']],
+        ]);
+        $this->login();
+
+        // /company.html does not exist yet: PUT creates it (for a documents UI that saves a named page to a fixed path)
+        $this->putJson('/tansu/files', ['path' => '/company.html', 'contents' => '<p>new page</p>'])
+            ->assertOk()->assertJsonPath('path', '/company.html')->assertJsonPath('type', 'text/html');
+
+        $this->assertSame('<p>new page</p>', $this->get('/tansu/raw?path=/company.html')->assertOk()->streamedContent());
+    }
+
     public function test_editing_refuses_a_media_file(): void
     {
         $this->login();

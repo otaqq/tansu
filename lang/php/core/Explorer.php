@@ -243,19 +243,21 @@ final class Explorer
     }
 
     /**
-     * Replaces the contents of an existing editable file in place. The type is kept: it is read from the file's
-     * extension and must be an accepted, non-media type (a text type such as HTML, CSS or JS), and the new bytes
-     * must be text of that type. Media files are replaced by uploading a new file, not through this.
+     * Writes a text file's contents at an exact path, creating it when it does not exist yet and replacing it when it
+     * does (upsert). The type is read from the path's extension and must be an accepted, non-media type (a text type
+     * such as HTML, CSS or JS), and the bytes must be text of that type. Media files are added by uploading, not here;
+     * this is for editing text and for a documents UI that saves a named document to a fixed path.
      *
-     * @param int               $size     the new contents' size in bytes, checked before $contents is read
-     * @param Closure(): string $contents reads the new contents
+     * @param int               $size     the contents' size in bytes, checked before $contents is read
+     * @param Closure(): string $contents reads the contents
      * @return array<string, mixed> the stored file
      */
     public function replace(string $path, int $size, Closure $contents): array
     {
         $this->assertManage();
-        $this->assertFile($path);
-        $this->assertNotInUse([$path]);
+        if ($path === Path::ROOT) {
+            throw TansuException::invalidPath();
+        }
         $type = $this->options->types->typeOf(Path::name($path));
         if ($type === null || FileTypes::isSignatureType($type) || !$this->options->types->accepts($type)) {
             throw TansuException::typeNotAllowed();
@@ -264,12 +266,19 @@ final class Explorer
             throw TansuException::fileTooLarge();
         }
         $location = $this->owner->location($path);
-        $current = $this->storage->fileSize($location);
+        $exists = $this->storage->fileExists($location);
+        if (!$exists && $this->storage->directoryExists($location)) {
+            throw TansuException::invalidPath();
+        }
+        if ($exists) {
+            $this->assertNotInUse([$path]);
+        }
+        $current = $exists ? $this->storage->fileSize($location) : 0;
         $inspection = $this->inspector->inspect($contents(), name: Path::name($path));
         if ($inspection->type !== $type) {
             throw TansuException::typeNotAllowed();
         }
-        $this->assertRoom(strlen($inspection->bytes), newFile: false, replacing: $current);
+        $this->assertRoom(strlen($inspection->bytes), newFile: !$exists, replacing: $current);
         $this->storage->write($location, $inspection->bytes);
 
         return $this->fileData($this->attributes($path));

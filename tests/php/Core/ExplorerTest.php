@@ -138,6 +138,17 @@ final class ExplorerTest extends TestCase
         $this->assertSame('<p>new</p>', file_get_contents($this->dir.'/tansu/42'.$stored['path']));
     }
 
+    public function test_replace_creates_the_file_when_it_does_not_exist(): void
+    {
+        $explorer = $this->explorer(options: $this->pageOptions());
+
+        $created = $explorer->replace('/about.html', 11, fn () => '<p>about</p>');
+
+        $this->assertSame('/about.html', $created['path']);
+        $this->assertSame('text/html', $created['type']);
+        $this->assertSame('<p>about</p>', file_get_contents($this->dir.'/tansu/42/about.html'));
+    }
+
     public function test_replace_refuses_a_media_file(): void
     {
         $explorer = $this->explorer(options: $this->pageOptions());

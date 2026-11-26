@@ -31,6 +31,7 @@ flowchart LR
     subgraph browser["Browser"]
         explorer["&lt;tansu-explorer&gt;<br/>tree · grid · upload"]
         picker["&lt;tansu-picker&gt;<br/>modal · preview"]
+        documents["&lt;tansu-documents&gt;<br/>list · editor · preview"]
     end
     api{{"HTTP JSON API<br/>(protocol/)"}}
     subgraph server["Server"]
@@ -41,6 +42,7 @@ flowchart LR
     storage[("Storage<br/>local · S3 · …")]
     explorer --> api
     picker --> api
+    documents --> api
     api --> laravel --> core --> storage
     api -.-> other
 ```
@@ -170,6 +172,33 @@ The built-in types are media (images, PDF, video). `types` registers more — fo
 ```
 
 Media is recognized by its content, but text (HTML, CSS, JS) has no byte signature, so an upload of a custom type is classified by its name's extension once its bytes are confirmed to be text (no NUL byte, valid UTF-8): a binary can never be stored as one. Stored files keep the hardened, sandboxed headers of `GET /raw`, so HTML never runs as a page; to let `link` open a page as it looks live, set that area's `url` to where the host publishes it.
+
+### Editing named documents (`<tansu-documents>`)
+
+For editing a fixed set of named text documents — a site's pages, templates, snippets — rather than browsing files, use `<tansu-documents>`: a list of names on the left, and a detail with a text editor and a preview on the right. It saves each document with `PUT /files` (which creates the file if it does not exist yet), against the same area and types as the explorer.
+
+The host provides the list and the preview, so tansu never needs to know how a document is rendered:
+
+```html
+<tansu-documents id="pages" endpoint="{{ url('tansu/pages') }}" owner="{{ $theme }}" lang="ja"></tansu-documents>
+<script type="module">
+  const pages = document.getElementById('pages');
+  // The catalog: each `path` is the file saved for that document
+  pages.documents = [
+    { key: 'home',    name: 'Home',    path: '/home.html' },
+    { key: 'company', name: 'Company', path: '/company.html' },
+  ];
+  // The preview: render into `mount` however you like. Here, the host's own published page in an iframe; for an
+  // unsaved preview, POST `content` to a host endpoint that renders it and show the result.
+  pages.previewProvider = ({ item, content, mount }) => {
+    const frame = document.createElement('iframe');
+    frame.src = `/${item.key}`;           // the real page, with the site's own CSS/JS
+    mount.append(frame);
+  };
+</script>
+```
+
+`previewProvider` receives `{ item, content, mount, client }` and renders the preview into `mount` (the component supplies the element; what goes in it — an iframe, a client-side render, nothing — is entirely the host's). This keeps the rendering (layout, assets, a framework's own view pipeline) in the host app, outside tansu. Omit it for an editor with no preview. The component fires `tansu-change` (`action: "document-saved"`) on save.
 
 ## Development
 
