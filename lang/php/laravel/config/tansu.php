@@ -15,7 +15,9 @@ return [
     /*
      * Decides whose files a request works on and whether the user may change them.
      * A class implementing Otaqq\Tansu\Laravel\OwnerResolver. The default gives each logged-in user
-     * their own root, "tansu/users/{id}".
+     * their own root, "tansu/users/{id}". For a tenant, team or theme, extend
+     * Otaqq\Tansu\Laravel\AbstractOwnerResolver and implement ownerId() (it handles the login check,
+     * a Gate-based manage permission, and building the Owner).
      */
     'owner_resolver' => Otaqq\Tansu\Laravel\UserOwnerResolver::class,
 

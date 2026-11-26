@@ -106,6 +106,22 @@ return [
 
 Implement `Otaqq\Tansu\Laravel\OwnerResolver` and set it as `owner_resolver`. It gets the request and the `owner` query parameter (set by the `owner` attribute of the elements), and returns an `Otaqq\Tansu\Owner`: the owner's root on the disk, whether the user may change anything, and optionally the owner's own limits. Throw `AuthorizationException` when the user may not access the owner.
 
+For the common case — one owner per logged-in tenant, team, user or theme — extend `Otaqq\Tansu\Laravel\AbstractOwnerResolver` instead and implement only `ownerId()`. The base requires a logged-in user, decides management rights from a Gate ability (`$manageAbility`, with the owner id passed to the Gate), and builds the `Owner`; override `root()`, `canManage()` or `limits()` when the defaults do not fit.
+
+```php
+final class ThemeOwnerResolver extends AbstractOwnerResolver
+{
+    protected ?string $manageAbility = 'pages.manage';   // null = every logged-in user may manage
+
+    protected function ownerId(Request $request, ?string $requested): string
+    {
+        return CurrentTheme::name();   // the one app-specific line
+    }
+}
+```
+
+Implement `OwnerResolver` directly when the owner is not a simple id — for example a per-company library that authorizes the requested company:
+
 ```php
 final class CompanyOwnerResolver implements OwnerResolver
 {
