@@ -18,13 +18,16 @@ final class Limits
     public readonly ?array $fileSizes;
 
     /**
-     * @param int|array<string, int> $fileSize bytes, or bytes by group (see FileTypes::GROUPS). A group missing
-     *                                         from the map gets the largest size in it
+     * @param int|array<string, int> $fileSize bytes, or bytes by group. A group missing from the map gets the
+     *                                         largest size in it
+     * @param list<string>           $groups   the group names a per-group map may use (default: the built-in groups;
+     *                                         pass a FileTypes' groupNames() when custom groups are configured)
      */
     public function __construct(
         int|array $fileSize,
         public readonly ?int $totalSize = null,
         public readonly ?int $files = null,
+        array $groups = FileTypes::DEFAULT_GROUPS,
     ) {
         if (is_int($fileSize)) {
             $this->fileSize = $fileSize;
@@ -36,7 +39,7 @@ final class Limits
             throw new InvalidArgumentException('file_size by group needs at least one group');
         }
         foreach ($fileSize as $group => $size) {
-            if (!isset(FileTypes::GROUPS[$group])) {
+            if (!in_array($group, $groups, true)) {
                 throw new InvalidArgumentException("Unknown file group: \"$group\"");
             }
         }
@@ -45,11 +48,11 @@ final class Limits
     }
 
     /**
-     * The largest upload for a type.
+     * The largest upload for a group.
      */
-    public function fileSizeFor(string $type): int
+    public function fileSizeFor(string $group): int
     {
-        return $this->fileSizes[FileTypes::groupOf($type)] ?? $this->fileSize;
+        return $this->fileSizes[$group] ?? $this->fileSize;
     }
 
     /**

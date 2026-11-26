@@ -31,6 +31,7 @@ flowchart LR
     subgraph browser["Browser"]
         explorer["&lt;tansu-explorer&gt;<br/>tree · grid · upload"]
         picker["&lt;tansu-picker&gt;<br/>modal · preview"]
+        documents["&lt;tansu-documents&gt;<br/>list · editor · preview"]
     end
     api{{"HTTP JSON API<br/>(protocol/)"}}
     subgraph server["Server"]
@@ -41,6 +42,7 @@ flowchart LR
     storage[("Storage<br/>local · S3 · …")]
     explorer --> api
     picker --> api
+    documents --> api
     api --> laravel --> core --> storage
     api -.-> other
 ```
@@ -87,7 +89,8 @@ return [
 
 | Key | Default | Meaning |
 |---|---|---|
-| `accept` | `['image', 'document', 'video']` | Groups and media types. `image`: JPEG, PNG, GIF, WebP; `document`: PDF; `video`: MP4, WebM. SVG (`'image/svg+xml'`) is in no group: name it to accept it (it is sanitized) |
+| `accept` | `['image', 'document', 'video']` | Groups and media types. `image`: JPEG, PNG, GIF, WebP; `document`: PDF; `video`: MP4, WebM. SVG (`'image/svg+xml'`) is in no group: name it to accept it (it is sanitized). A custom group or type from `types` may be listed here too |
+| `types` | `[]` | Extra types beyond the built-in media (see [Custom types and the text editor](#custom-types-and-the-text-editor)). Each media type maps to its `extensions`, the `group` it joins (a new name is allowed) and its `preview` mode |
 | `strip_metadata` | `true` | Remove EXIF, XMP and similar metadata from images. **PDF and video metadata is not removed** (author, device, and in phone videos the GPS position); tell users when that matters |
 | `limits.file_size` | image 5 MB, document 10 MB, video 50 MB | One number for every type, or a size per group. A map is merged over the defaults, so a group left out keeps its default size (write one number to use the same size for all). Checked on the uploaded file, before optimization. PHP's `upload_max_filesize` and `post_max_size` must be at least the largest |
 | `limits.total_size`, `limits.files` | `null` | Quota per owner; `null` for no limit |
@@ -130,6 +133,74 @@ The picker submits a path relative to the owner's root (`/photos/shop.jpg`). `Ot
 ### Private files
 
 With `'url' => 'route'`, file URLs go through `GET /tansu/raw`, which applies the same OwnerResolver, so files can live on a private disk.
+
+### Several libraries
+
+One app can run more than one library from the package — say an image library and a separate area for documents or site files. List them under `areas`: each is a config that overrides the top-level one (merged at every depth), so an area writes only what differs, and keeps its own disk, accepted types, owner resolver, limits and routes. Give each area a distinct `routes.prefix` and `routes.name`.
+
+```php
+'areas' => [
+    'documents' => [
+        'disk' => 'documents',
+        'accept' => ['document'],
+        'routes' => ['prefix' => 'documents', 'name' => 'documents.'],
+    ],
+],
+```
+
+Point an element at an area's own endpoint: `<tansu-explorer endpoint="{{ url('documents') }}">`. In PHP, `app(Otaqq\Tansu\Laravel\TansuManager::class)->area('documents')` is that area's `Tansu`; `area()` with no name, and `Tansu` resolved directly, are the default area (the top-level config). Without `areas` there is only the default area and nothing changes.
+
+### Custom types and the text editor
+
+The built-in types are media (images, PDF, video). `types` registers more — for example the raw HTML, CSS and JavaScript of a static site, so designers upload and edit the pages from the explorer. Each media type maps to its `extensions` (the first is the one files are stored with), the `group` it joins (a new name such as `page` is allowed; per-group limits and `accept` use it) and its `preview`:
+
+| `preview` | The explorer shows |
+|---|---|
+| `image`, `video` | The file inline (the default for media groups) |
+| `link` | An **Open in a new tab** link (the default for a custom type, and for PDF) |
+| `text` | An **in-place editor**: the file's text, a Save button and a status line. Saving sends `PUT /files` |
+| `none` | Only the icon |
+
+```php
+'accept' => ['image', 'page'],
+'types' => [
+    'text/html'              => ['extensions' => ['html', 'htm'], 'group' => 'page', 'preview' => 'link'],
+    'text/css'               => ['extensions' => ['css'],         'group' => 'page', 'preview' => 'text'],
+    'application/javascript' => ['extensions' => ['js'],          'group' => 'page', 'preview' => 'text'],
+],
+'limits' => ['file_size' => ['page' => 1 * 1024 * 1024]],
+```
+
+Media is recognized by its content, but text (HTML, CSS, JS) has no byte signature, so an upload of a custom type is classified by its name's extension once its bytes are confirmed to be text (no NUL byte, valid UTF-8): a binary can never be stored as one. Stored files keep the hardened, sandboxed headers of `GET /raw`, so HTML never runs as a page; to let `link` open a page as it looks live, set that area's `url` to where the host publishes it.
+
+### Editing named documents (`<tansu-documents>`)
+
+For editing a fixed set of named text documents — a site's pages, templates, snippets — rather than browsing files, use `<tansu-documents>`: a list of names on the left, and a detail with a text editor and a preview on the right. It saves each document with `PUT /files` (which creates the file if it does not exist yet), against the same area and types as the explorer.
+
+The host provides the list and the preview, so tansu never needs to know how a document is rendered:
+
+```html
+<tansu-documents id="pages" endpoint="{{ url('tansu/pages') }}" owner="{{ $theme }}" lang="ja"></tansu-documents>
+<script type="module">
+  const pages = document.getElementById('pages');
+  // The catalog: each `path` is the file saved for that document
+  pages.documents = [
+    { key: 'home',    name: 'Home',    path: '/home.html' },
+    { key: 'company', name: 'Company', path: '/company.html' },
+  ];
+  // The preview: render into `mount` however you like. Here, the host's own published page in an iframe; for an
+  // unsaved preview, POST `content` to a host endpoint that renders it and show the result.
+  pages.previewProvider = ({ item, content, mount }) => {
+    const frame = document.createElement('iframe');
+    frame.src = `/${item.key}`;           // the real page, with the site's own CSS/JS
+    mount.append(frame);
+  };
+</script>
+```
+
+`previewProvider` receives `{ item, content, mount, client }` and renders the preview into `mount` (the component supplies the element; what goes in it — an iframe, a client-side render, nothing — is entirely the host's). This keeps the rendering (layout, assets, a framework's own view pipeline) in the host app, outside tansu. Omit it for an editor with no preview. The component fires `tansu-change` (`action: "document-saved"`) on save.
+
+The editor also has **Upload** (read a local file's text into the editor, then save) and **Download** (save the current contents as the document's file name). In the explorer, a selected file's detail has a **Download** link too.
 
 ## Development
 

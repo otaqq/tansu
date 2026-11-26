@@ -73,13 +73,19 @@ if (!str_starts_with($uri, '/api/')) {
 }
 
 $ownerId = is_string($_GET['owner'] ?? null) && preg_match('/^[a-z0-9-]{1,32}$/', $_GET['owner']) ? $_GET['owner'] : 'demo';
+// The demo also accepts a static site's text files, to show the in-place editor (preview "text") and the link preview.
+$types = new FileTypes([...FileTypes::DEFAULT, FileTypes::SVG, 'page'], [
+    'text/html' => ['extensions' => ['html', 'htm'], 'group' => 'page', 'preview' => 'link'],
+    'text/css' => ['extensions' => ['css'], 'group' => 'page', 'preview' => 'text'],
+    'application/javascript' => ['extensions' => ['js'], 'group' => 'page', 'preview' => 'text'],
+]);
 $explorer = new Explorer(
     $storage,
     new Owner($ownerId, "owners/$ownerId", canManage: $ownerId !== 'readonly', limits: $ownerId === 'tiny' ? new Limits(2 * 1024 * 1024, null, 1) : null),
     fn (string $location, string $path) => '/api/raw?'.http_build_query(['path' => $path, 'owner' => $ownerId]),
     new Options(
-        new FileTypes([...FileTypes::DEFAULT, FileTypes::SVG]),
-        new Limits(['image' => 2 * 1024 * 1024, 'document' => 5 * 1024 * 1024, 'video' => 20 * 1024 * 1024], 30 * 1024 * 1024, 50),
+        $types,
+        new Limits(['image' => 2 * 1024 * 1024, 'document' => 5 * 1024 * 1024, 'video' => 20 * 1024 * 1024, 'page' => 1024 * 1024], 30 * 1024 * 1024, 50, $types->groupNames()),
         optimize: OptimizeOptions::fromArray([
             'enabled' => true,
             'presets' => [
@@ -114,6 +120,7 @@ try {
         'PATCH /folders' => $explorer->renameFolder(Path::parse($body()['path'] ?? null), $body()['name'] ?? null),
         'DELETE /folders' => [204, $explorer->deleteFolder(Path::parse($_GET['path'] ?? null))],
         'POST /files' => [201, upload($explorer)],
+        'PUT /files' => $explorer->replace(Path::parse($body()['path'] ?? null), strlen((string) ($body()['contents'] ?? '')), fn () => (string) ($body()['contents'] ?? '')),
         'PATCH /files' => $explorer->renameFile(Path::parse($body()['path'] ?? null), $body()['name'] ?? null),
         'DELETE /files' => [204, $explorer->deleteFile(Path::parse($_GET['path'] ?? null))],
         'GET /raw' => raw($explorer),

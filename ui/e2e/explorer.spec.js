@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { png, svg, text } from './fixtures.js';
+import { css, html, png, svg, text } from './fixtures.js';
 
 test.beforeEach(async ({ request }) => {
   await request.post('/__reset');
@@ -34,6 +34,33 @@ test('uploads, previews, renames and deletes a file', async ({ page }) => {
   await dialog.getByRole('button', { name: 'Delete' }).click();
   await expect(explorer.getByText('This folder is empty.')).toBeVisible();
   await expect(explorer.locator('.usage')).toContainText('0 of 50 files');
+});
+
+test('edits a text file in place and saves it, and offers HTML as a link', async ({ page }) => {
+  await page.goto('/');
+  const explorer = page.locator('#explorer');
+
+  await explorer.locator('input[type=file]').setInputFiles(css('style.css', 'a{}'));
+  await explorer.getByRole('option', { name: 'style.css' }).click();
+  const details = explorer.locator('.details');
+  const editor = details.locator('textarea.editor');
+  await expect(editor).toHaveValue('a{}');
+
+  const save = details.getByRole('button', { name: 'Save' });
+  await expect(save).toBeDisabled();
+  await editor.fill('b { color: blue }');
+  await expect(save).toBeEnabled();
+  await save.click();
+  await expect(details.getByText('Saved')).toBeVisible();
+
+  const stored = await page.request.get('/api/raw?path=/style.css');
+  expect(await stored.text()).toBe('b { color: blue }');
+
+  // HTML is previewed as a link, not an editor
+  await explorer.locator('input[type=file]').setInputFiles(html('index.html'));
+  await explorer.getByRole('option', { name: 'index.html' }).click();
+  await expect(details.getByRole('link', { name: 'Open in a new tab' })).toBeVisible();
+  await expect(details.locator('textarea.editor')).toHaveCount(0);
 });
 
 test('creates, opens, renames and deletes folders', async ({ page }) => {
@@ -96,7 +123,7 @@ test('shows errors from the server', async ({ page }) => {
 
   // The name says PNG, the content does not: the server refuses it
   await explorer.locator('input[type=file]').setInputFiles(text('fake.png'));
-  await expect(explorer.locator('.uploads')).toContainText('This type of file cannot be uploaded (JPG, PNG, GIF, WEBP, PDF, MP4, WEBM, SVG)');
+  await expect(explorer.locator('.uploads')).toContainText('This type of file cannot be uploaded (JPG, PNG, GIF, WEBP, PDF, MP4, WEBM, SVG, HTML, CSS, JS)');
 
   for (let i = 0; i < 2; i++) {
     await explorer.getByRole('button', { name: 'New folder' }).click();

@@ -75,6 +75,30 @@ export class TansuClient {
     return this.request('PATCH', '/files', { body: { path, name } });
   }
 
+  /** Replaces the contents of an existing editable (text) file. */
+  updateFile(path, contents) {
+    return this.request('PUT', '/files', { body: { path, contents } });
+  }
+
+  /**
+   * A stored file's contents as text, for editing it.
+   *
+   * @param {string} url the file's `url`, as given in a listing
+   * @returns {Promise<string>}
+   */
+  async text(url) {
+    let response;
+    try {
+      response = await this.fetch(url, { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+    } catch {
+      throw new TansuError('network', 'The server could not be reached.');
+    }
+    if (response.status < 200 || response.status >= 300) {
+      throw new TansuError(`http_${response.status}`, `HTTP ${response.status}`, { status: response.status });
+    }
+    return response.text();
+  }
+
   deleteFile(path) {
     return this.request('DELETE', '/files', { query: { path } });
   }

@@ -18,32 +18,16 @@
  */
 import { TansuClient, TansuError } from './api.js';
 import { adoptStyles, h, replace } from './dom.js';
+import { ICONS, icon, iconButton, iconLink } from './icons.js';
 import { formatDate, formatSize, languageOf, translator } from './i18n.js';
 import { fileGroup, fileSizeLimit, initialOptimize, labelOf, optimizeFields } from './optimize.js';
 import { limitsSummary, quotaState } from './quota.js';
 import { explorerStyles } from './styles.js';
 
-const SVG_NS = 'http://www.w3.org/2000/svg';
-const FOLDER_ICON = 'M2 5.5A1.5 1.5 0 0 1 3.5 4h4.38a1.5 1.5 0 0 1 1.06.44L10.5 6h10A1.5 1.5 0 0 1 22 7.5v11a1.5 1.5 0 0 1-1.5 1.5h-17A1.5 1.5 0 0 1 2 18.5z';
-const FILE_ICON = 'M6 2h8l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm7 1.5V8h4.5z';
-const DOCUMENT_ICON = 'M6 2h8l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm7 1.5V8h4.5zM8 11.5h8V13H8zm0 3.5h8v1.5H8z';
-const VIDEO_ICON = 'M3 5h18a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zm7 4v6l5-3z';
-
-function icon(pathData) {
-  const svg = document.createElementNS(SVG_NS, 'svg');
-  svg.setAttribute('viewBox', '0 0 24 24');
-  svg.setAttribute('aria-hidden', 'true');
-  const path = document.createElementNS(SVG_NS, 'path');
-  path.setAttribute('d', pathData);
-  path.setAttribute('fill-rule', 'evenodd');
-  svg.append(path);
-  return svg;
-}
-
 /** The icon of a file that has no thumbnail, by its group. */
 function fileIcon(type) {
   const group = fileGroup(type);
-  return icon(group === 'video' ? VIDEO_ICON : type === 'application/pdf' ? DOCUMENT_ICON : FILE_ICON);
+  return icon(group === 'video' ? ICONS.video : type === 'application/pdf' ? ICONS.document : ICONS.file);
 }
 
 function parentOf(path) {
@@ -65,6 +49,8 @@ export class TansuExplorer extends HTMLElement {
   #path = '/';
   #selected = null;
   #uploads = [];
+  /** Editing state of the selected text file: { path, text, loading, saving, dirty, saved, error }, or null */
+  #editor = null;
   /** State of the optimize controls (see optimize.js); undefined until the info is loaded */
   #optimize = undefined;
   #status = null;
@@ -327,14 +313,13 @@ export class TansuExplorer extends HTMLElement {
     }
     const full = this.#full;
     replace(this.#els.buttons, this.#canManage ? [
-      h('button', { type: 'button', onclick: () => this.#createFolder() }, t('newFolder')),
-      h('button', {
-        type: 'button',
+      iconButton('folderPlus', t('newFolder'), { onclick: () => this.#createFolder() }),
+      iconButton('upload', t('upload'), {
         class: 'primary',
         disabled: full,
-        title: full ? this.#fullMessage() : null,
+        title: full ? this.#fullMessage() : t('upload'),
         onclick: () => this.#els.input.click(),
-      }, t('upload')),
+      }),
     ] : null);
     this.#renderLimits();
   }
@@ -350,7 +335,13 @@ export class TansuExplorer extends HTMLElement {
     const t = this.#t;
     const lang = this.#lang;
     const { sizes, types } = limitsSummary(this.#info);
-    const parts = sizes.map(({ group, max }) => t(group ? `limits.${group}` : 'limits.one', { max: formatSize(max, lang) }));
+    const parts = sizes.map(({ group, max }) => {
+      const size = formatSize(max, lang);
+      if (!group) return t('limits.one', { max: size });
+      const label = t(`limits.${group}`, { max: size });
+      // A custom group has no label of its own: name it generically rather than show the raw key
+      return label === `limits.${group}` ? t('limits.group', { group, max: size }) : label;
+    });
     replace(element, [...parts, types.join(', ')].join(' · '));
   }
 
@@ -459,7 +450,7 @@ export class TansuExplorer extends HTMLElement {
     replace(this.#els.grid, items.map((item) => {
       const isFolder = !('size' in item);
       const thumb = isFolder
-        ? icon(FOLDER_ICON)
+        ? icon(ICONS.folder)
         : item.type.startsWith('image/')
           ? h('img', { src: item.url, alt: '', loading: 'lazy', decoding: 'async' })
           : fileIcon(item.type);
@@ -497,34 +488,129 @@ export class TansuExplorer extends HTMLElement {
     }
     const isFolder = !('size' in item);
     const manage = this.#canManage ? [
-      h('button', { type: 'button', onclick: () => this.#rename(item) }, t('rename')),
-      h('button', { type: 'button', class: 'danger', onclick: () => this.#delete(item) }, t('delete')),
+      iconButton('pencil', t('rename'), { onclick: () => this.#rename(item) }),
+      iconButton('trash', t('delete'), { class: 'danger', onclick: () => this.#delete(item) }),
     ] : [];
     if (isFolder) {
       replace(this.#els.details,
-        h('div', { class: 'preview' }, icon(FOLDER_ICON)),
+        h('div', { class: 'preview' }, icon(ICONS.folder)),
         h('h3', {}, item.name),
-        h('div', { class: 'actions' }, h('button', { type: 'button', onclick: () => this.open(item.path) }, t('open')), manage));
+        h('div', { class: 'actions' }, iconButton('open', t('open'), { onclick: () => this.open(item.path) }), manage));
+      return;
+    }
+    const mode = this.#previewMode(item.type);
+    if (mode === 'text') {
+      this.#renderTextDetails(item, manage);
       return;
     }
     const lang = this.#lang;
-    const group = fileGroup(item.type);
-    const preview = group === 'image'
+    const preview = mode === 'image'
       ? h('img', { src: item.url, alt: item.name })
-      : group === 'video'
+      : mode === 'video'
         ? h('video', { src: item.url, controls: true, preload: 'metadata', 'aria-label': item.name })
         : fileIcon(item.type);
     replace(this.#els.details,
       h('div', { class: 'preview', part: 'preview' }, preview),
       h('h3', {}, item.name),
-      h('dl', {},
-        h('dt', {}, t('size')), h('dd', {}, formatSize(item.size, lang)),
-        h('dt', {}, t('type')), h('dd', {}, item.type),
-        h('dt', {}, t('modified')), h('dd', {}, formatDate(item.modified, lang))),
+      this.#fileMeta(item),
       h('div', { class: 'actions' },
-        this.hasAttribute('selectable') ? h('button', { type: 'button', class: 'primary', onclick: () => this.#choose(item) }, t('choose')) : null,
-        h('a', { href: item.url, target: '_blank', rel: 'noopener', class: 'button', part: 'link' }, group === 'document' ? t('openInNewTab') : t('open')),
+        this.hasAttribute('selectable') ? iconButton('check', t('choose'), { class: 'primary', onclick: () => this.#choose(item) }) : null,
+        mode === 'none' ? null : iconLink('open', mode === 'link' ? t('openInNewTab') : t('open'), { href: item.url, target: '_blank', rel: 'noopener', part: 'link' }),
+        iconLink('download', t('download'), { href: item.url, download: item.name, part: 'download' }),
         manage));
+  }
+
+  /** The preview mode of a type, from the server's accept list, falling back to the media group. */
+  #previewMode(type) {
+    const found = this.#info?.accept?.find((entry) => entry.type === type);
+    if (found?.preview) return found.preview;
+    const group = fileGroup(type);
+    return group === 'image' ? 'image' : group === 'video' ? 'video' : 'link';
+  }
+
+  /** The size / type / modified list shown for a file. */
+  #fileMeta(item) {
+    const t = this.#t;
+    const lang = this.#lang;
+    return h('dl', {},
+      h('dt', {}, t('size')), h('dd', {}, formatSize(item.size, lang)),
+      h('dt', {}, t('type')), h('dd', {}, item.type),
+      h('dt', {}, t('modified')), h('dd', {}, formatDate(item.modified, lang)));
+  }
+
+  /** Details of a text file: an in-place editor when the file can be managed, otherwise a read-only view. */
+  #renderTextDetails(item, manage) {
+    const t = this.#t;
+    if (!this.#editor || this.#editor.path !== item.path) {
+      this.#editor = { path: item.path, text: '', loading: true, saving: false, dirty: false, saved: false, error: null };
+      this.#loadEditor(item);
+    }
+    const editor = this.#editor;
+    const canManage = this.#canManage;
+    const status = h('span', { class: 'editor-status', role: 'status' },
+      editor.error ? this.#message(editor.error) : editor.saving ? t('saving') : editor.saved && !editor.dirty ? t('saved') : '');
+    const save = canManage
+      ? iconButton('check', t('save'), { class: 'primary', disabled: !editor.dirty || editor.saving || editor.loading ? true : null, onclick: () => this.#saveEditor(item) })
+      : null;
+    const textarea = h('textarea', {
+      class: 'editor',
+      part: 'editor',
+      spellcheck: 'false',
+      wrap: 'off',
+      'aria-label': item.name,
+      readonly: canManage ? null : true,
+      disabled: editor.loading ? true : null,
+      oninput: (event) => {
+        editor.text = event.target.value;
+        editor.dirty = true;
+        editor.saved = false;
+        editor.error = null;
+        if (save) save.disabled = false;
+        status.textContent = '';
+      },
+    }, editor.loading ? '' : editor.text);
+    replace(this.#els.details,
+      h('div', { class: 'preview editor-preview', part: 'preview' }, editor.loading ? h('p', { class: 'hint' }, t('loading')) : textarea),
+      h('h3', {}, item.name),
+      this.#fileMeta(item),
+      h('div', { class: 'actions' },
+        save,
+        status,
+        iconLink('open', t('openInNewTab'), { href: item.url, target: '_blank', rel: 'noopener', part: 'link' }),
+        manage));
+  }
+
+  async #loadEditor(item) {
+    try {
+      const text = await this.#client.text(item.url);
+      if (this.#editor?.path !== item.path) return;
+      this.#editor.text = text;
+      this.#editor.loading = false;
+    } catch (error) {
+      if (this.#editor?.path !== item.path) return;
+      this.#editor.loading = false;
+      this.#editor.error = error;
+    }
+    if (this.#selected?.path === item.path) this.#renderDetails();
+  }
+
+  async #saveEditor(item) {
+    if (!this.#editor || this.#editor.saving || this.#editor.loading) return;
+    this.#editor.saving = true;
+    this.#editor.error = null;
+    this.#renderDetails();
+    const saved = await this.#run(() => this.#client.updateFile(item.path, this.#editor.text));
+    if (!this.#editor || this.#editor.path !== item.path) return;
+    this.#editor.saving = false;
+    if (!saved) {
+      this.#renderDetails();
+      return;
+    }
+    this.#editor.dirty = false;
+    this.#editor.saved = true;
+    this.#changed('file-edited', item.path, saved);
+    this.#selected = saved;
+    await Promise.all([this.#loadInfo(), this.#loadFolder()]);
   }
 
   #renderUploads() {

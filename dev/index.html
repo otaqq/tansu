@@ -34,6 +34,11 @@
   </section>
 
   <section>
+    <h2>&lt;tansu-documents&gt;</h2>
+    <tansu-documents id="documents" endpoint="/api"></tansu-documents>
+  </section>
+
+  <section>
     <h2>Events</h2>
     <pre id="events"></pre>
   </section>
@@ -41,13 +46,25 @@
   <script type="module">
     const explorer = document.getElementById('explorer');
     const picker = document.getElementById('picker');
+    const documents = document.getElementById('documents');
     const params = new URLSearchParams(location.search);
     const owner = document.getElementById('owner');
     const lang = document.getElementById('lang');
     owner.value = params.get('owner') || 'demo';
     lang.value = params.get('lang') || 'en';
     document.documentElement.lang = lang.value;
-    for (const element of [explorer, picker]) element.setAttribute('owner', owner.value);
+    for (const element of [explorer, picker, documents]) element.setAttribute('owner', owner.value);
+
+    // The host supplies the page list and the preview. This demo renders the edited HTML straight into an iframe.
+    documents.documents = [
+      { key: 'home', name: 'Home', path: '/home.html' },
+      { key: 'about', name: 'About', path: '/about.html' },
+    ];
+    documents.previewProvider = ({ content, mount }) => {
+      const frame = document.createElement('iframe');
+      frame.srcdoc = content || '<p style="color:#888;font-family:sans-serif">Nothing yet</p>';
+      mount.append(frame);
+    };
     for (const select of [owner, lang]) {
       select.addEventListener('change', () => {
         params.set(select.id, select.value);

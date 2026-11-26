@@ -32,10 +32,46 @@ return [
     ],
 
     /*
+     * More than one library from the same package: name => a config that overrides the keys above (merged at every
+     * depth, like the app config over these defaults), so an area writes only what differs — its own disk, accepted
+     * types, owner_resolver, limits and routes (give each area a distinct routes.prefix and routes.name). The keys
+     * above are the "default" area. Leave this empty for a single library. Resolve an area with
+     * app(Otaqq\Tansu\Laravel\TansuManager::class)->area('<name>'); Tansu resolved directly is the default area.
+     *
+     * 'areas' => [
+     *     'documents' => [
+     *         'disk' => 'documents',
+     *         'accept' => ['document'],
+     *         'routes' => ['prefix' => 'documents', 'name' => 'documents.'],
+     *     ],
+     * ],
+     */
+    'areas' => [],
+
+    /*
      * What uploads may be: groups ("image": JPEG, PNG, GIF, WebP; "document": PDF; "video": MP4, WebM)
      * and media types. SVG ('image/svg+xml') is in no group and off by default; when added, it is sanitized.
      */
     'accept' => FileTypes::DEFAULT_GROUPS,
+
+    /*
+     * Extra file types this installation accepts, beyond the built-in media. Each media type maps to its extensions
+     * (the first is the one files are stored with), the group it joins (a new name is allowed; per-group limits and
+     * the accept list use it) and how the explorer previews it: "image" or "video" (inline), "link" (open in a new
+     * tab), "text" (edit in place) or "none". Add a type's name or its group to "accept" above to allow it.
+     *
+     * Text types have no byte signature, so an upload is classified by its extension once its bytes are confirmed to
+     * be text. Served files keep the hardened, sandboxed headers of GET /raw, so stored HTML never runs as a page;
+     * to preview a page as it looks live, point "url" at where the host publishes it.
+     *
+     * Example — the raw HTML, CSS and JavaScript of a static site:
+     * 'types' => [
+     *     'text/html'              => ['extensions' => ['html', 'htm'], 'group' => 'page', 'preview' => 'link'],
+     *     'text/css'               => ['extensions' => ['css'],         'group' => 'page', 'preview' => 'text'],
+     *     'application/javascript' => ['extensions' => ['js'],          'group' => 'page', 'preview' => 'text'],
+     * ],
+     */
+    'types' => [],
 
     /*
      * Removes EXIF, XMP and similar metadata from images. PDF and video metadata is not removed.

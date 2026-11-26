@@ -64,6 +64,14 @@ final class ExplorerTest extends TestCase
         return $explorer->upload($folder, $name, strlen($bytes), fn () => $bytes, $optimize);
     }
 
+    private function pageOptions(): Options
+    {
+        return new Options(new FileTypes(['page', 'image'], [
+            'text/html' => ['extensions' => ['html', 'htm'], 'group' => 'page', 'preview' => 'link'],
+            'text/css' => ['extensions' => ['css'], 'group' => 'page', 'preview' => 'text'],
+        ]));
+    }
+
     private static function optimizing(): Options
     {
         return new Options(optimize: OptimizeOptions::fromArray([
@@ -100,7 +108,7 @@ final class ExplorerTest extends TestCase
         $info = $this->explorer(new Owner('1', 'o/1', canManage: false, limits: new Limits(100, 1000, 3)))->info();
 
         $this->assertSame(1, $info['protocol']);
-        $this->assertSame(['type' => 'image/jpeg', 'extensions' => ['jpg', 'jpeg'], 'group' => 'image'], $info['accept'][0]);
+        $this->assertSame(['type' => 'image/jpeg', 'extensions' => ['jpg', 'jpeg'], 'group' => 'image', 'preview' => 'image'], $info['accept'][0]);
         $this->assertSame(['file_size' => 100, 'file_sizes' => null, 'total_size' => 1000, 'files' => 3], $info['limits']);
         $this->assertSame(['manage' => false], $info['can']);
     }
@@ -115,6 +123,48 @@ final class ExplorerTest extends TestCase
         $this->assertSame('/storage/tansu/42/shop-photo.jpg', $file['url']);
         $this->assertSame(filesize($this->dir.'/tansu/42/shop-photo.jpg'), $file['size']);
         $this->assertMatchesRegularExpression('/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d[+-]\d\d:\d\d$/', $file['modified']);
+    }
+
+    public function test_replace_edits_an_editable_text_file_in_place(): void
+    {
+        $explorer = $this->explorer(options: $this->pageOptions());
+        $stored = $this->upload($explorer, '/', 'index.html', '<p>old</p>');
+        $this->assertSame('text/html', $stored['type']);
+
+        $updated = $explorer->replace($stored['path'], 10, fn () => '<p>new</p>');
+
+        $this->assertSame($stored['path'], $updated['path']);
+        $this->assertSame('text/html', $updated['type']);
+        $this->assertSame('<p>new</p>', file_get_contents($this->dir.'/tansu/42'.$stored['path']));
+    }
+
+    public function test_replace_creates_the_file_when_it_does_not_exist(): void
+    {
+        $explorer = $this->explorer(options: $this->pageOptions());
+
+        $created = $explorer->replace('/about.html', 11, fn () => '<p>about</p>');
+
+        $this->assertSame('/about.html', $created['path']);
+        $this->assertSame('text/html', $created['type']);
+        $this->assertSame('<p>about</p>', file_get_contents($this->dir.'/tansu/42/about.html'));
+    }
+
+    public function test_replace_refuses_a_media_file(): void
+    {
+        $explorer = $this->explorer(options: $this->pageOptions());
+        $jpg = $this->upload($explorer, '/', 'photo.jpg');
+
+        $this->expectExceptionObject(TansuException::typeNotAllowed());
+        $explorer->replace($jpg['path'], 3, fn () => 'xxx');
+    }
+
+    public function test_replace_refuses_contents_that_are_not_text_of_the_files_type(): void
+    {
+        $explorer = $this->explorer(options: $this->pageOptions());
+        $stored = $this->upload($explorer, '/', 'index.html', '<p>old</p>');
+
+        $this->expectExceptionObject(TansuException::typeNotAllowed());
+        $explorer->replace($stored['path'], 5, fn () => "a\0b");
     }
 
     public function test_upload_never_overwrites(): void

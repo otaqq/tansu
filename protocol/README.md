@@ -79,6 +79,7 @@ All paths below are relative to the base URL.
 | `PATCH /folders` | `{ "path", "name": new name }` | `200` Folder |
 | `DELETE /folders?path=` | | `204` |
 | `POST /files` | multipart: `path` (folder), `file`, optionally `optimize`, `max_width`, `max_height`, `quality` | `201` File |
+| `PUT /files` | `{ "path", "contents": new text }` | `200` File |
 | `PATCH /files` | `{ "path", "name": new name }` | `200` File |
 | `DELETE /files?path=` | | `204` |
 | `GET /raw?path=` | | `200` the file's bytes |
@@ -91,8 +92,10 @@ What the UI needs before it shows anything: what can be uploaded and how much ro
 {
   "protocol": 1,
   "accept": [
-    { "type": "image/jpeg", "extensions": ["jpg", "jpeg"], "group": "image" },
-    { "type": "application/pdf", "extensions": ["pdf"], "group": "document" }
+    { "type": "image/jpeg", "extensions": ["jpg", "jpeg"], "group": "image", "preview": "image" },
+    { "type": "application/pdf", "extensions": ["pdf"], "group": "document", "preview": "link" },
+    { "type": "text/html", "extensions": ["html", "htm"], "group": "page", "preview": "link" },
+    { "type": "text/css", "extensions": ["css"], "group": "page", "preview": "text" }
   ],
   "limits": { "file_size": 10485760, "file_sizes": { "image": 4194304, "document": 10485760 }, "total_size": 52428800, "files": 50 },
   "optimize": {
@@ -112,7 +115,8 @@ What the UI needs before it shows anything: what can be uploaded and how much ro
 }
 ```
 
-- `accept[].group` is `image`, `document` or `video`.
+- `accept[].group` is `image`, `document` or `video`, or a custom group a host has configured (for example `page`).
+- `accept[].preview` tells the UI how to show the type: `image` or `video` (inline), `link` (open in a new tab), `text` (edit in place) or `none`.
 - `limits.file_size` is the largest single upload in bytes, of any type. `limits.file_sizes`, when not `null`, is the largest upload by group; a group missing from it gets `file_size`. `limits.total_size` and `limits.files` are the owner's quota; `null` means no limit.
 - `optimize` is `{ "enabled": false }` when the back end offers no optimization. Otherwise it lists the presets (`label` is a string or a map by language; a `null` size or quality is not changed), the ranges of custom input (`custom` is `null` when free input is not offered), and `default`, what the UI selects first (`null` for keeping the original, a preset key or `custom`).
 - `can.manage` is `false` when the user may only look and pick. The UI then hides upload, rename and delete; the back end refuses them anyway (`forbidden`).
@@ -145,6 +149,10 @@ Optional fields ask for [image optimization](#image-optimization):
 
 A preset key the back end does not know, `custom` with no size and no quality, values out of the ranges in `GET /info`, or any optimization when `optimize.enabled` is `false`, fail with `invalid_request`.
 
+### `PUT /files`
+
+Writes a text file's contents at an exact path, **creating it when it does not exist yet and replacing it when it does** (upsert), for a UI that edits text (HTML, CSS, JS) or saves a named document to a fixed path rather than uploading. The body is `{ "path", "contents" }`, `contents` the new text. The type is read from the path's extension and must be an accepted, non-media type (so a text type, never an image or video — those are added with `POST /files`), and `contents` must be text of that type, or the request fails with `type_not_allowed`. The checks are the manage right (`forbidden`), the type, the size against the type's group limit (`file_too_large`), and — when replacing — that it is in use (`in_use`), plus the quota (`quota_exceeded`). The response is the stored file.
+
 ### `PATCH /files`, `PATCH /folders`
 
 Renames in place; moving to another folder is not part of protocol 1. The extension of a file never changes: the back end keeps the current extension whatever the new name ends with.
@@ -161,6 +169,7 @@ Back ends check every upload by its content, never by its name or by the type th
 - **Metadata.** EXIF, XMP, IPTC and text metadata (GPS position, camera serial numbers, comments, …) is removed from JPEG, PNG and WebP before the file is stored, without re-encoding. A JPEG that the EXIF orientation says is rotated or mirrored is re-encoded upright instead, so it still shows the right way up; when decoding it is not safe (memory, see below), only the orientation is kept in a minimal EXIF segment.
 - **PDF** is recognized by `%PDF-` at the start; **MP4** by an `ftyp` box with an MP4 video brand (HEIC, AVIF and QuickTime use the same structure with other brands and are refused); **WebM** by the EBML header with the doc type `webm`. They are stored as they are: their metadata is not removed.
 - **SVG** is off unless the host enables it. When enabled, it is parsed as XML and only an allowlist of elements and attributes is kept: no scripts, no event handlers, no `foreignObject`, no external references. A file that does not parse, or has a `DOCTYPE`, fails with `type_not_allowed`.
+- **Text types** (HTML, CSS, JS and other types a host configures) have no byte signature, so they are the exception: an upload is classified by its name's extension, but only once its bytes are confirmed to be text (no NUL byte, valid UTF-8), so a binary can never be stored as one. They are served, like everything else, with the hardened sandboxed headers of `GET /raw`, so stored HTML never runs as a page.
 
 ## Image optimization
 

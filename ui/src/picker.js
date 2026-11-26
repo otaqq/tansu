@@ -16,6 +16,7 @@
  *   tansu-select        detail: { file } a file was chosen (bubbles from the explorer)
  */
 import { adoptStyles, h, replace } from './dom.js';
+import { iconButton } from './icons.js';
 import { languageOf, translator } from './i18n.js';
 import { pickerStyles } from './styles.js';
 
@@ -139,14 +140,14 @@ export class TansuPicker extends HTMLElement {
     const modal = h('dialog', { class: 'modal', part: 'modal' },
       h('header', {},
         h('h2', {}, this.getAttribute('label') || t('pick')),
-        h('button', { type: 'button', onclick: () => modal.close() }, t('close'))),
+        iconButton('close', t('close'), { onclick: () => modal.close() })),
       body);
     // Do not keep the explorer around: it loads again with fresh data next time
     modal.addEventListener('close', () => replace(body));
     const preview = h('div', { class: 'preview', part: 'preview' });
     const file = h('div', { class: 'file', part: 'file' });
     const choose = h('button', { type: 'button', class: 'primary', part: 'choose', onclick: () => this.open() });
-    const remove = h('button', { type: 'button', part: 'remove', onclick: () => this.clear() }, t('remove'));
+    const remove = iconButton('close', t('remove'), { part: 'remove', onclick: () => this.clear() });
     const root = h('div', { class: 'picker', part: 'picker' }, preview, h('div', { class: 'side' }, choose, remove, file));
     replace(this.shadowRoot, root, modal);
     this.#els = { root, preview, file, choose, remove, modal, body, lang };

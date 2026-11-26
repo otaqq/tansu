@@ -82,10 +82,11 @@ final class Tansu
         $limits = $this->config['limits'];
 
         $fileSize = $limits['file_size'];
+        $types = new FileTypes(array_values($this->config['accept']), $this->config['types'] ?? []);
 
         return new Options(
-            new FileTypes(array_values($this->config['accept'])),
-            new Limits(is_array($fileSize) ? $fileSize : (int) $fileSize, $limits['total_size'] ?? null, $limits['files'] ?? null),
+            $types,
+            new Limits(is_array($fileSize) ? $fileSize : (int) $fileSize, $limits['total_size'] ?? null, $limits['files'] ?? null, $types->groupNames()),
             (bool) $this->config['strip_metadata'],
             OptimizeOptions::fromArray($this->config['optimize'] ?? []),
         );
