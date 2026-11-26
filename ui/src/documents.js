@@ -35,6 +35,8 @@ export class TansuDocuments extends HTMLElement {
   #error = null;
   #els = {};
   #connected = false;
+  #view = 'split';
+  #splitRatio = 0.5;
 
   constructor() {
     super();
@@ -123,6 +125,7 @@ export class TansuDocuments extends HTMLElement {
     const t = this.#t;
     const list = h('nav', { class: 'list', 'aria-label': t('documents.title') },
       h('h2', {}, t('documents.title')),
+      this.#selected && this.#previewProvider ? this.#viewToggle() : null,
       this.#documents.length
         ? this.#documents.map((doc) => h('button', {
           type: 'button', class: 'doc', 'aria-current': this.#selected === doc.key ? 'true' : 'false',
@@ -130,10 +133,12 @@ export class TansuDocuments extends HTMLElement {
         }, h('span', { class: 'name' }, doc.name || doc.key), doc.subtitle ? h('span', { class: 'badge' }, doc.subtitle) : null))
         : h('p', { class: 'empty' }, t('documents.empty')));
     if (!this.#selected) {
+      this.#els.layout.dataset.view = 'split';
       replace(this.#els.layout, list, h('div', { class: 'placeholder' }, h('p', { class: 'hint' }, t('documents.pick'))));
       return;
     }
-    replace(this.#els.layout, list, this.#editorPane(), this.#previewPane());
+    this.#applyLayout();
+    replace(this.#els.layout, list, this.#editorPane(), this.#resizer(), this.#previewPane());
     this.#renderPreview();
   }
 
@@ -160,7 +165,7 @@ export class TansuDocuments extends HTMLElement {
     this.#els.status = h('span', { class: 'status', role: 'status' },
       this.#error ? this.#message(this.#error) : this.#saving ? t('saving') : this.#saved && !this.#dirty ? t('saved') : '');
     const preview = this.#previewProvider
-      ? iconButton('eye', t('documents.preview'), { disabled: this.#loading ? true : null, onclick: () => this.#renderPreview() })
+      ? iconButton('refresh', t('documents.refresh'), { disabled: this.#loading ? true : null, onclick: () => this.#renderPreview() })
       : null;
     const fileInput = h('input', {
       type: 'file', accept: this.#accept(), hidden: true,
@@ -168,8 +173,10 @@ export class TansuDocuments extends HTMLElement {
     });
     const upload = iconButton('upload', t('upload'), { disabled: this.#loading ? true : null, onclick: () => fileInput.click() });
     const download = iconButton('download', t('download'), { disabled: this.#loading ? true : null, onclick: () => this.#download() });
-    return h('div', { class: 'editor-pane' }, editor,
+    const pane = h('div', { class: 'editor-pane' }, editor,
       h('div', { class: 'bar' }, this.#els.save, preview, upload, download, this.#els.status), fileInput);
+    this.#els.editorPane = pane;
+    return pane;
   }
 
   /** The accept attribute for the upload input: the document's own extension. */
@@ -202,7 +209,76 @@ export class TansuDocuments extends HTMLElement {
 
   #previewPane() {
     this.#els.mount = h('div', { class: 'preview-mount', part: 'preview' });
-    return h('div', { class: 'preview-pane' }, this.#els.mount);
+    const pane = h('div', { class: 'preview-pane' }, this.#els.mount);
+    this.#els.previewPane = pane;
+    return pane;
+  }
+
+  #viewToggle() {
+    const t = this.#t;
+    const button = (mode, icon, key) => iconButton(icon, t(key), {
+      class: 'view', 'aria-pressed': this.#view === mode ? 'true' : 'false',
+      onclick: () => this.#setView(mode),
+    });
+    this.#els.views = {
+      split: button('split', 'columns', 'documents.view_split'),
+      editor: button('editor', 'pencil', 'documents.view_editor'),
+      preview: button('preview', 'eye', 'documents.view_preview'),
+    };
+    return h('div', { class: 'view-toggle', role: 'group', 'aria-label': t('documents.view') },
+      this.#els.views.split, this.#els.views.editor, this.#els.views.preview);
+  }
+
+  /** Switches the editor / preview layout: split (both), editor only, or preview only. */
+  #setView(mode) {
+    this.#view = mode;
+    this.#els.layout.dataset.view = mode;
+    for (const [m, button] of Object.entries(this.#els.views || {})) {
+      button.setAttribute('aria-pressed', m === mode ? 'true' : 'false');
+    }
+    if (mode !== 'editor') this.#renderPreview();
+  }
+
+  #resizer() {
+    const el = h('div', {
+      class: 'resizer', part: 'resizer', role: 'separator', 'aria-orientation': 'vertical',
+      'aria-label': this.#t('resize'), onpointerdown: (event) => this.#startResize(event),
+    });
+    this.#els.resizer = el;
+    return el;
+  }
+
+  /** Drags the split divider so the editor and the preview grow and shrink against each other. */
+  #startResize(event) {
+    if (this.#view !== 'split') return;
+    event.preventDefault();
+    const layout = this.#els.layout;
+    const resizer = this.#els.resizer;
+    const left = this.#els.editorPane?.getBoundingClientRect().left ?? 0;
+    const width = (this.#els.previewPane?.getBoundingClientRect().right ?? 0) - left;
+    const onMove = (move) => {
+      if (width <= 0) return;
+      const ratio = Math.min(0.85, Math.max(0.15, (move.clientX - left) / width));
+      this.#splitRatio = ratio;
+      layout.style.setProperty('--editor-col', `${ratio}fr`);
+      layout.style.setProperty('--preview-col', `${1 - ratio}fr`);
+    };
+    const onUp = () => {
+      resizer.removeEventListener('pointermove', onMove);
+      resizer.removeEventListener('pointerup', onUp);
+      try { resizer.releasePointerCapture(event.pointerId); } catch { /* was not captured */ }
+    };
+    try { resizer.setPointerCapture(event.pointerId); } catch { /* capture unsupported */ }
+    resizer.addEventListener('pointermove', onMove);
+    resizer.addEventListener('pointerup', onUp);
+  }
+
+  /** Applies the current view and split ratio to the layout element. */
+  #applyLayout() {
+    const layout = this.#els.layout;
+    layout.dataset.view = this.#view;
+    layout.style.setProperty('--editor-col', `${this.#splitRatio}fr`);
+    layout.style.setProperty('--preview-col', `${1 - this.#splitRatio}fr`);
   }
 
   #renderPreview() {

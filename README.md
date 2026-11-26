@@ -47,6 +47,8 @@ flowchart LR
     api -.-> other
 ```
 
+`<tansu-explorer>` lays out a folder tree, a file grid and a details/preview pane on the right; drag the divider between the grid and the preview to resize them.
+
 ## Laravel
 
 ```sh
@@ -191,7 +193,7 @@ Media is recognized by its content, but text (HTML, CSS, JS) has no byte signatu
 
 ### Editing named documents (`<tansu-documents>`)
 
-For editing a fixed set of named text documents — a site's pages, templates, snippets — rather than browsing files, use `<tansu-documents>`: a list of names on the left, and a detail with a text editor and a preview on the right. It saves each document with `PUT /files` (which creates the file if it does not exist yet), against the same area and types as the explorer.
+For editing a fixed set of named text documents — a site's pages, templates, snippets — rather than browsing files, use `<tansu-documents>`: a list of names on the left, and a detail with a text editor and a preview on the right. It saves each document with `PUT /files` (which creates the file if it does not exist yet), against the same area and types as the explorer. The editor and preview are a resizable split — drag the divider to change their widths — with a view toggle in the list (split, editor only, preview only), so a document can be edited or previewed full-width.
 
 The host provides the list and the preview, so tansu never needs to know how a document is rendered:
 

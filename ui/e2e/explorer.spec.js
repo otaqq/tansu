@@ -212,3 +212,19 @@ test('speaks Japanese', async ({ page }) => {
   await expect(explorer.getByRole('button', { name: 'アップロード' })).toBeVisible();
   await expect(explorer.getByText('このフォルダは空です。')).toBeVisible();
 });
+
+test('resizes the details / preview pane by dragging the divider', async ({ page }) => {
+  await page.goto('/');
+  const explorer = page.locator('#explorer');
+  await explorer.locator('.resizer').waitFor();
+
+  const before = (await explorer.locator('.details').boundingBox()).width;
+  const handle = await explorer.locator('.resizer').boundingBox();
+  // Drag the divider toward the file area: the details / preview pane gets wider
+  await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(handle.x - 120, handle.y + handle.height / 2, { steps: 5 });
+  await page.mouse.up();
+  const after = (await explorer.locator('.details').boundingBox()).width;
+  expect(after).toBeGreaterThan(before);
+});

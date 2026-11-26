@@ -234,6 +234,10 @@ export class TansuExplorer extends HTMLElement {
       status: h('div', { class: 'status', role: 'status', 'aria-live': 'polite' }),
       usage: h('div', { class: 'usage', part: 'usage' }),
       details: h('aside', { class: 'details', part: 'details' }),
+      resizer: h('div', {
+        class: 'resizer', part: 'resizer', role: 'separator', 'aria-orientation': 'vertical',
+        'aria-label': t('resize'), onpointerdown: (event) => this.#startResize(event),
+      }),
       drop: h('div', { class: 'drop', hidden: true }, t('dropHere')),
       dialog: h('dialog', { part: 'dialog' }),
     };
@@ -259,8 +263,29 @@ export class TansuExplorer extends HTMLElement {
       }
       this.#upload([...(event.dataTransfer?.files || [])]);
     });
-    this.#els.layout = h('div', { class: 'layout', part: 'layout' }, this.#els.tree, main, this.#els.details);
+    this.#els.layout = h('div', { class: 'layout', part: 'layout' }, this.#els.tree, main, this.#els.resizer, this.#els.details);
     replace(this.shadowRoot, this.#els.layout, input, this.#els.dialog);
+  }
+
+  /** Drags the divider between the file area and the details/preview: the preview grows and the file area shrinks. */
+  #startResize(event) {
+    event.preventDefault();
+    const layout = this.#els.layout;
+    const resizer = this.#els.resizer;
+    const right = this.#els.details.getBoundingClientRect().right;
+    const max = layout.getBoundingClientRect().width * 0.6;
+    const onMove = (move) => {
+      const width = Math.max(160, Math.min(max, right - move.clientX));
+      layout.style.setProperty('--details-w', `${width}px`);
+    };
+    const onUp = () => {
+      resizer.removeEventListener('pointermove', onMove);
+      resizer.removeEventListener('pointerup', onUp);
+      try { resizer.releasePointerCapture(event.pointerId); } catch { /* was not captured */ }
+    };
+    try { resizer.setPointerCapture(event.pointerId); } catch { /* capture unsupported */ }
+    resizer.addEventListener('pointermove', onMove);
+    resizer.addEventListener('pointerup', onUp);
   }
 
   #onDrag(event, step) {

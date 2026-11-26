@@ -59,7 +59,7 @@ export const explorerStyles = `
   * { box-sizing: border-box; }
   ${controls}
   .layout {
-    display: grid; grid-template-columns: minmax(10rem, 14rem) 1fr minmax(12rem, 16rem);
+    display: grid; grid-template-columns: minmax(10rem, 14rem) 1fr 6px var(--details-w, 15rem);
     height: 100%; border: 1px solid var(--_border); border-radius: var(--_radius);
     background: var(--_background); overflow: hidden;
   }
@@ -67,6 +67,8 @@ export const explorerStyles = `
   .tree { border-right: 1px solid var(--_border); }
   .details { border-left: 1px solid var(--_border); display: flex; flex-direction: column; gap: 0.75rem; }
   .main { display: flex; flex-direction: column; min-width: 0; position: relative; }
+  .resizer { cursor: col-resize; background: var(--_border); touch-action: none; }
+  .resizer:hover { background: var(--_accent); }
   .toolbar {
     display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;
     padding: 0.5rem; border-bottom: 1px solid var(--_border);
@@ -154,6 +156,7 @@ export const explorerStyles = `
   @media (max-width: 48rem) {
     :host { height: auto; }
     .layout { grid-template-columns: 1fr; height: auto; }
+    .resizer { display: none; }
     .tree { border-right: none; border-bottom: 1px solid var(--_border); max-height: 10rem; }
     .details { border-left: none; border-top: 1px solid var(--_border); }
     .grid { min-height: 16rem; max-height: 60vh; }
@@ -170,7 +173,7 @@ export const documentsStyles = `
   * { box-sizing: border-box; }
   ${controls}
   .layout {
-    display: grid; grid-template-columns: minmax(9rem, 13rem) minmax(0, 1fr) minmax(0, 1fr);
+    display: grid; grid-template-columns: minmax(9rem, 13rem) minmax(0, var(--editor-col, 1fr)) 6px minmax(0, var(--preview-col, 1fr));
     height: 100%; border: 1px solid var(--_border); border-radius: var(--_radius);
     background: var(--_background); overflow: hidden;
   }
@@ -181,9 +184,17 @@ export const documentsStyles = `
   .doc[aria-current="true"] { background: var(--_selected); }
   .doc .name { display: block; }
   .doc .badge { display: block; font-size: 0.72em; color: var(--_muted); margin-top: 0.1em; }
-  .placeholder { grid-column: 2 / 4; display: grid; place-items: center; }
+  .placeholder { grid-column: 2 / 5; display: grid; place-items: center; }
   .editor-pane, .preview-pane { display: flex; flex-direction: column; min-height: 0; padding: 0.5rem; gap: 0.5rem; }
   .preview-pane { border-left: 1px solid var(--_border); }
+  .resizer { cursor: col-resize; background: var(--_border); touch-action: none; }
+  .resizer:hover { background: var(--_accent); }
+  .layout[data-view="editor"] { grid-template-columns: minmax(9rem, 13rem) 1fr; }
+  .layout[data-view="editor"] .resizer, .layout[data-view="editor"] .preview-pane { display: none; }
+  .layout[data-view="preview"] { grid-template-columns: minmax(9rem, 13rem) 1fr; }
+  .layout[data-view="preview"] .resizer, .layout[data-view="preview"] .editor-pane { display: none; }
+  .view-toggle { display: flex; gap: 0.25rem; margin-bottom: 0.5rem; }
+  .view-toggle .view[aria-pressed="true"] { background: var(--_selected); }
   .editor { flex: 1; width: 100%; resize: none; white-space: pre; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.8em; line-height: 1.4; border: 1px solid var(--_border); border-radius: var(--_radius); padding: 0.5rem; background: var(--_surface); color: inherit; }
   .bar { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
   .status { color: var(--_muted); font-size: 0.85em; }
@@ -191,7 +202,8 @@ export const documentsStyles = `
   .preview-mount iframe { width: 100%; height: 100%; border: 0; display: block; }
   .hint, .empty { color: var(--_muted); font-size: 0.9em; padding: 0.5rem; }
   @media (max-width: 52rem) {
-    .layout { grid-template-columns: 1fr; grid-auto-rows: minmax(min-content, auto); height: auto; }
+    .layout, .layout[data-view="editor"], .layout[data-view="preview"] { grid-template-columns: 1fr; grid-auto-rows: minmax(min-content, auto); height: auto; }
+    .resizer { display: none; }
     .placeholder { grid-column: auto; padding: 1rem; }
     .preview-pane { border-left: 0; border-top: 1px solid var(--_border); }
     .editor { min-height: 12rem; } .preview-mount { min-height: 16rem; }

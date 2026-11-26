@@ -22,7 +22,7 @@ test('lists pages, edits, saves and previews with the host-provided preview', as
   await expect(docs.getByText('Saved')).toBeVisible();
 
   // The injected preview renders the edited HTML in an iframe
-  await docs.getByRole('button', { name: 'Preview' }).click();
+  await docs.getByRole('button', { name: 'Refresh' }).click();
   await expect(docs.locator('.preview-mount iframe').contentFrame().getByRole('heading', { name: 'Hello page' })).toBeVisible();
 
   // It was saved on the server: reload, reopen, the content is there
@@ -50,5 +50,38 @@ test('speaks the configured language', async ({ page }) => {
   const docs = page.locator('#documents');
   await docs.getByRole('button', { name: 'Home' }).click();
   await expect(docs.getByRole('button', { name: '保存' })).toBeVisible();
-  await expect(docs.getByRole('button', { name: 'プレビュー' })).toBeVisible();
+  await expect(docs.getByRole('button', { name: '更新' })).toBeVisible();
+});
+
+test('toggles split / editor-only / preview-only, and resizes the split', async ({ page }) => {
+  await page.goto('/');
+  const docs = page.locator('#documents');
+  await docs.getByRole('button', { name: 'Home' }).click();
+
+  // Split by default: editor, preview and the resizer all show
+  await expect(docs.locator('.editor-pane')).toBeVisible();
+  await expect(docs.locator('.preview-pane')).toBeVisible();
+  await expect(docs.locator('.resizer')).toBeVisible();
+
+  // Editor only hides the preview and the resizer
+  await docs.getByRole('button', { name: 'Editor only' }).click();
+  await expect(docs.locator('.editor-pane')).toBeVisible();
+  await expect(docs.locator('.preview-pane')).toBeHidden();
+  await expect(docs.locator('.resizer')).toBeHidden();
+
+  // Preview only hides the editor
+  await docs.getByRole('button', { name: 'Preview only' }).click();
+  await expect(docs.locator('.editor-pane')).toBeHidden();
+  await expect(docs.locator('.preview-pane')).toBeVisible();
+
+  // Back to split, then drag the divider left: the editor gets narrower
+  await docs.getByRole('button', { name: 'Split' }).click();
+  const before = (await docs.locator('.editor-pane').boundingBox()).width;
+  const handle = await docs.locator('.resizer').boundingBox();
+  await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(handle.x - 120, handle.y + handle.height / 2, { steps: 5 });
+  await page.mouse.up();
+  const after = (await docs.locator('.editor-pane').boundingBox()).width;
+  expect(after).toBeLessThan(before);
 });
