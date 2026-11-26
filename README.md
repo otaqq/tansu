@@ -200,6 +200,8 @@ The host provides the list and the preview, so tansu never needs to know how a d
 
 `previewProvider` receives `{ item, content, mount, client }` and renders the preview into `mount` (the component supplies the element; what goes in it — an iframe, a client-side render, nothing — is entirely the host's). This keeps the rendering (layout, assets, a framework's own view pipeline) in the host app, outside tansu. Omit it for an editor with no preview. The component fires `tansu-change` (`action: "document-saved"`) on save.
 
+The editor also has **Upload** (read a local file's text into the editor, then save) and **Download** (save the current contents as the document's file name). In the explorer, a selected file's detail has a **Download** link too.
+
 ## Development
 
 You need [mise](https://mise.jdx.dev/) (it installs Node) and Docker (PHP runs in a container built from [tests/php/Dockerfile](tests/php/Dockerfile): the lowest supported PHP with GD).

@@ -29,6 +29,20 @@ test('lists pages, edits, saves and previews with the host-provided preview', as
   await expect(page.locator('#documents textarea.editor')).toHaveValue('<h1>Hello page</h1>');
 });
 
+test('loads a local file into the editor and offers a download', async ({ page }) => {
+  await page.goto('/');
+  const docs = page.locator('#documents');
+  await docs.getByRole('button', { name: 'Home' }).click();
+  await docs.locator('textarea.editor').waitFor();
+
+  // Upload: a local file's text is read into the editor
+  await docs.locator('input[type=file]').setInputFiles({ name: 'home.html', mimeType: 'text/html', buffer: Buffer.from('<h2>From file</h2>') });
+  await expect(docs.locator('textarea.editor')).toHaveValue('<h2>From file</h2>');
+
+  // Download: the button is present (the actual file save is left to the browser)
+  await expect(docs.getByRole('button', { name: 'Download' })).toBeVisible();
+});
+
 test('speaks the configured language', async ({ page }) => {
   await page.goto('/?lang=ja');
   const docs = page.locator('#documents');

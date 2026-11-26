@@ -160,7 +160,42 @@ export class TansuDocuments extends HTMLElement {
     const preview = this.#previewProvider
       ? h('button', { type: 'button', disabled: this.#loading ? true : null, onclick: () => this.#renderPreview() }, t('documents.preview'))
       : null;
-    return h('div', { class: 'editor-pane' }, editor, h('div', { class: 'bar' }, this.#els.save, preview, this.#els.status));
+    const fileInput = h('input', {
+      type: 'file', accept: this.#accept(), hidden: true,
+      onchange: (event) => this.#loadFile(event.target.files?.[0]),
+    });
+    const upload = h('button', { type: 'button', disabled: this.#loading ? true : null, onclick: () => fileInput.click() }, t('upload'));
+    const download = h('button', { type: 'button', disabled: this.#loading ? true : null, onclick: () => this.#download() }, t('download'));
+    return h('div', { class: 'editor-pane' }, editor,
+      h('div', { class: 'bar' }, this.#els.save, preview, upload, download, this.#els.status), fileInput);
+  }
+
+  /** The accept attribute for the upload input: the document's own extension. */
+  #accept() {
+    const path = this.#doc()?.path || '';
+    const dot = path.lastIndexOf('.');
+    return dot >= 0 ? path.slice(dot) : '';
+  }
+
+  /** Reads a local file into the editor (the person then saves it). */
+  async #loadFile(file) {
+    if (!file) return;
+    this.#content = await file.text();
+    this.#dirty = true;
+    this.#saved = false;
+    this.#error = null;
+    this.#render();
+  }
+
+  /** Downloads the current contents as the document's file name. */
+  #download() {
+    const name = (this.#doc()?.path || 'document').split('/').pop();
+    const url = URL.createObjectURL(new Blob([this.#content], { type: 'text/plain;charset=utf-8' }));
+    const link = h('a', { href: url, download: name });
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
   #previewPane() {
