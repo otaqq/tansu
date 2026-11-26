@@ -3,7 +3,8 @@
  * a detail with a text editor and a host-provided preview on the right.
  *
  * The documents and the preview come from the host, so tansu stays unaware of how a document is rendered:
- *   el.documents = [{ key, name, path }]      the list; `path` is the file saved with PUT /files (created if new)
+ *   el.documents = [{ key, name, path, subtitle? }]   the list; `path` is the file saved with PUT /files (created if
+ *       new); `subtitle` is an optional small second line (for example the file name)
  *   el.previewProvider = ({ item, content, mount, client }) => {}
  *       renders the preview into `mount` (an element): set an iframe's src to the host's page, POST the unsaved
  *       `content` to the host's render endpoint, render on the client — anything. Omit it for no preview.
@@ -126,7 +127,7 @@ export class TansuDocuments extends HTMLElement {
         ? this.#documents.map((doc) => h('button', {
           type: 'button', class: 'doc', 'aria-current': this.#selected === doc.key ? 'true' : 'false',
           onclick: () => this.#select(doc.key),
-        }, h('span', { class: 'name' }, doc.name || doc.key)))
+        }, h('span', { class: 'name' }, doc.name || doc.key), doc.subtitle ? h('span', { class: 'badge' }, doc.subtitle) : null))
         : h('p', { class: 'empty' }, t('documents.empty')));
     if (!this.#selected) {
       replace(this.#els.layout, list, h('div', { class: 'placeholder' }, h('p', { class: 'hint' }, t('documents.pick'))));

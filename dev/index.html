@@ -57,8 +57,8 @@
 
     // The host supplies the page list and the preview. This demo renders the edited HTML straight into an iframe.
     documents.documents = [
-      { key: 'home', name: 'Home', path: '/home.html' },
-      { key: 'about', name: 'About', path: '/about.html' },
+      { key: 'home', name: 'Home', path: '/home.html', subtitle: 'home.html' },
+      { key: 'about', name: 'About', path: '/about.html', subtitle: 'about.html' },
     ];
     documents.previewProvider = ({ content, mount }) => {
       const frame = document.createElement('iframe');

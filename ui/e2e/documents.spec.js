@@ -9,6 +9,8 @@ test('lists pages, edits, saves and previews with the host-provided preview', as
   const docs = page.locator('#documents');
   await expect(docs.getByRole('button', { name: 'Home' })).toBeVisible();
   await expect(docs.getByRole('button', { name: 'About' })).toBeVisible();
+  // The optional subtitle (here the file name) shows under the name
+  await expect(docs.locator('.doc .badge').first()).toHaveText('home.html');
 
   // A page with no file yet starts empty
   await docs.getByRole('button', { name: 'Home' }).click();

@@ -185,8 +185,8 @@ The host provides the list and the preview, so tansu never needs to know how a d
   const pages = document.getElementById('pages');
   // The catalog: each `path` is the file saved for that document
   pages.documents = [
-    { key: 'home',    name: 'Home',    path: '/home.html' },
-    { key: 'company', name: 'Company', path: '/company.html' },
+    { key: 'home',    name: 'Home',    path: '/home.html',    subtitle: 'home.html' },
+    { key: 'company', name: 'Company', path: '/company.html', subtitle: 'company.html' },
   ];
   // The preview: render into `mount` however you like. Here, the host's own published page in an iframe; for an
   // unsaved preview, POST `content` to a host endpoint that renders it and show the result.

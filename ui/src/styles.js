@@ -180,7 +180,7 @@ export const documentsStyles = `
   .doc:hover { background: var(--_background); }
   .doc[aria-current="true"] { background: var(--_selected); }
   .doc .name { display: block; }
-  .doc .badge { font-size: 0.7em; color: var(--_muted); }
+  .doc .badge { display: block; font-size: 0.72em; color: var(--_muted); margin-top: 0.1em; }
   .placeholder { grid-column: 2 / 4; display: grid; place-items: center; }
   .editor-pane, .preview-pane { display: flex; flex-direction: column; min-height: 0; padding: 0.5rem; gap: 0.5rem; }
   .preview-pane { border-left: 1px solid var(--_border); }
