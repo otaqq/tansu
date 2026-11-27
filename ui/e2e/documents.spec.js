@@ -63,14 +63,14 @@ test('toggles split / editor-only / preview-only, and resizes the split', async 
   await expect(docs.locator('.preview-pane')).toBeVisible();
   await expect(docs.locator('.resizer')).toBeVisible();
 
-  // Editor only hides the preview and the resizer
-  await docs.getByRole('button', { name: 'Editor only' }).click();
+  // Editor-only hides the preview and the resizer
+  await docs.getByRole('button', { name: 'Editor', exact: true }).click();
   await expect(docs.locator('.editor-pane')).toBeVisible();
   await expect(docs.locator('.preview-pane')).toBeHidden();
   await expect(docs.locator('.resizer')).toBeHidden();
 
-  // Preview only hides the editor
-  await docs.getByRole('button', { name: 'Preview only' }).click();
+  // Preview-only hides the editor
+  await docs.getByRole('button', { name: 'Preview', exact: true }).click();
   await expect(docs.locator('.editor-pane')).toBeHidden();
   await expect(docs.locator('.preview-pane')).toBeVisible();
 
